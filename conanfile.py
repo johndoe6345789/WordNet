@@ -1,6 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout
-from conan.tools.system.package_manager import Apt, Brew, PacMan, Yum, Zypper
+from conan.tools.system.package_manager import Apt, Brew
 
 
 class WordNetConan(ConanFile):
@@ -27,16 +27,16 @@ class WordNetConan(ConanFile):
         Install optional system dependencies for GUI support.
         Tcl/Tk are optional - build will succeed without them, but wishwn (GUI) won't be built.
         """
-        # Only install Tcl/Tk if explicitly requested or if we detect it's needed
-        # This is optional - the core library and CLI tool don't require it
+        # Only install Tcl/Tk if user has configured Conan to install system packages
+        # Use -c tools.system.package_manager:mode=install to enable automatic installation
+        install_mode = self.conf.get("tools.system.package_manager:mode", default="check") == "install"
         
-        # Use update=True and check=False to allow installation
-        apt = Apt(self)
-        if self.conf.get("tools.system.package_manager:mode", default="check") == "install":
+        if install_mode:
+            # Install Tcl/Tk development libraries for GUI support
+            apt = Apt(self)
             apt.install(["tcl-dev", "tk-dev"], update=True, check=False)
-        
-        brew = Brew(self)
-        if self.conf.get("tools.system.package_manager:mode", default="check") == "install":
+            
+            brew = Brew(self)
             brew.install(["tcl-tk"], check=False)
         
         # Windows typically doesn't need system packages for Tcl/Tk

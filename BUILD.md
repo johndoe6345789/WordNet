@@ -36,8 +36,13 @@ That's it! Conan will automatically:
 ### Test the Build
 
 ```bash
-# Test the executable (path depends on OS and build type)
+# Test the executable
+# Note: Conan creates nested directories (build/build/Release) for build artifacts
 WNHOME=. ./build/build/Release/src/wn test -over
+
+# On Windows, the path would be:
+# set WNHOME=.
+# .\build\build\Release\src\wn.exe test -over
 ```
 
 ## Alternative: Manual CMake Build (Not Recommended)
