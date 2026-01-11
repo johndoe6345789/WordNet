@@ -57,3 +57,4 @@ config.log
 *.swp
 *.swo
 .DS_Store
+_codeql_*
