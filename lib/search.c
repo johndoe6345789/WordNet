@@ -229,11 +229,11 @@ IndexPtr getindex(char *searchstr, int dbase)
 	/* Get offset of first entry.  Then eliminate duplicates
 	   and get offsets of unique strings. */
 
-	if (strings[0][0] != NULL)
+	if (strings[0][0] != '\0')
 	    offsets[0] = index_lookup(strings[0], dbase);
 
 	for (i = 1; i < MAX_FORMS; i++)
-	    if ((strings[i][0]) != NULL && (strcmp(strings[0], strings[i])))
+	    if ((strings[i][0]) != '\0' && (strcmp(strings[0], strings[i])))
 		offsets[i] = index_lookup(strings[i], dbase);
     }
 
