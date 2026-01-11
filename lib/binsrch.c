@@ -187,7 +187,7 @@ char *replace_line(char *new_line, char *searchkey, FILE *fp)
     copyfile(fp, tfp);
     if (fseek(fp, offset, 0) == -1)
 	return(NULL);		/* could not seek to offset */
-    fprintf(fp, new_line);	/* write line */
+    fprintf(fp, "%s", new_line);	/* write line */
     rewind(tfp);
     copyfile(tfp, fp);
 
@@ -214,7 +214,7 @@ char *insert_line(char *new_line, char *searchkey, FILE *fp)
     copyfile(fp, tfp);
     if (fseek(fp, offset, 0) == -1)
 	return(NULL);		/* could not seek to offset */
-    fprintf(fp, new_line);	/* write line */
+    fprintf(fp, "%s", new_line);	/* write line */
     rewind(tfp);
     copyfile(tfp, fp);
 

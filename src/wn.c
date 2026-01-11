@@ -129,7 +129,7 @@ static void printusage(), printlicense(),
        printsearches(char *, int, unsigned long);
 static int error_message(char *);
 
-main(int argc,char *argv[])
+int main(int argc,char *argv[])
 {
     display_message = error_message;
     
@@ -283,7 +283,7 @@ static void printsearches(char *word, int dbase, unsigned long search)
 	    printf("\t");
 	    printf(searchstr[j].template,
 		   partchars[dbase], partchars[dbase]);
-	    printf(searchstr[j].helpstr);
+	    printf("%s", searchstr[j].helpstr);
 	    printf("\n");
 	}
 }
@@ -344,7 +344,7 @@ static int getoptidx(char *searchtype)
 
 static int error_message(char *msg)
 {
-    fprintf(stderr, msg);
+    fprintf(stderr, "%s", msg);
     return(0);
 }
 
