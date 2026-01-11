@@ -108,33 +108,28 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
-    - name: Install dependencies (Ubuntu)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
     
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
+    - name: Install Conan
       run: |
-        brew install cmake ninja tcl-tk
+        pip install conan
+        conan --version
     
-    - name: Install dependencies (Windows)
-      if: runner.os == 'Windows'
+    - name: Detect Conan profile
       run: |
-        choco install cmake ninja
+        conan profile detect --force
     
-    - name: Configure CMake
+    - name: Build with Conan
       run: |
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
-    
-    - name: Build
-      run: |
-        cmake --build build --config Release
+        conan build . -of build -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
     
     - name: Install
       run: |
-        cmake --install build
+        cd build/build/Release
+        cmake --install . --prefix ../../../install
     
     - name: Package (Unix)
       if: runner.os != 'Windows'

@@ -59,21 +59,31 @@ jobs:
           fi
         fi
     
-    - name: Install dependencies
+    - name: Set up Python
+      if: steps.check_commits.outputs.has_changes == 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Install Conan
       if: steps.check_commits.outputs.has_changes == 'true'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build gcc
+        pip install conan
+        conan --version
+    
+    - name: Detect Conan profile
+      if: steps.check_commits.outputs.has_changes == 'true'
+      run: |
+        conan profile detect --force
     
     - name: Build and test
       if: steps.check_commits.outputs.has_changes == 'true'
       id: build_test
       run: |
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release
+        conan build . -of build -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
         echo "Testing WordNet executable..."
         echo "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
-        WNHOME=$(pwd) $(pwd)/build/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        WNHOME=$(pwd) $(pwd)/build/build/Release/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
         cat test_output.txt
         if [ "${TEST_EXIT:-0}" -ne 0 ]; then
           echo "Error: Test command returned exit code ${TEST_EXIT:-0}"
