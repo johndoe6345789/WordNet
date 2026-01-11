@@ -1,6 +1,35 @@
 
 		WordNet 3.0 Installation Instructions
 
+**IMPORTANT: This file contains legacy installation instructions for the old GNU Autotools build system.**
+
+**For modern installation using Conan (recommended), please see BUILD.md**
+
+The WordNet project has migrated to a modern build system using Conan package manager. 
+Conan handles all dependencies automatically and provides a consistent build experience 
+across all platforms (Linux, macOS, Windows).
+
+Quick Start:
+------------
+1. Install Conan: pip install conan
+2. Build: conan build . -of build
+3. See BUILD.md for detailed instructions
+
+Benefits of using Conan:
+-------------------------
+- No need to manually install CMake, Ninja, or other build tools
+- No need to use apt-get, brew, or other system package managers
+- Automatic dependency management
+- Cross-platform consistency
+- Reproducible builds
+
+For complete documentation, see: BUILD.md
+
+---
+
+Legacy GNU Autotools Instructions (Deprecated)
+==============================================
+
 Beginning with Version 2.1, we have changed the Unix package to a GNU
 Autotools package.  With Autotools, a system independent installation
 process builds and installs WordNet on your specific platform.  Read

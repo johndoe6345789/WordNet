@@ -1,20 +1,55 @@
-# Building WordNet with CMake, Ninja, and Conan
+# Building WordNet with Conan
 
-WordNet 3.0 now uses a modern build system based on CMake, Ninja, and Conan.
+WordNet 3.0 uses the Conan package manager for a modern, cross-platform build system.
 
 ## Prerequisites
 
-- CMake 3.15 or later
-- Ninja build system
-- Conan package manager (optional, for Conan-based builds)
-- GCC or other C compiler
-- Tcl/Tk (optional, for building the GUI browser `wishwn`)
+- Python 3.x (for Conan)
+- Conan package manager (version 2.0 or later)
+- A C compiler (GCC, Clang, MSVC, etc.)
 
-## Quick Start
+**Note:** CMake, Ninja, and other build tools will be managed automatically by Conan. You do not need to install them separately.
 
-### Option 1: Build with CMake and Ninja (recommended)
+## Quick Start - Recommended Method
+
+### Build with Conan (Primary Method)
 
 ```bash
+# Install Conan if not already installed
+pip install conan
+
+# Detect/create default profile
+conan profile detect --force
+
+# Build with Conan (allows system package installation for Tcl/Tk)
+conan build . -of build -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+```
+
+That's it! Conan will automatically:
+- Install CMake and Ninja build tools
+- Configure the build system
+- Compile the project
+- Handle system dependencies (like Tcl/Tk for the GUI)
+
+**Note:** The `tools.system.package_manager:mode=install` flag allows Conan to install system dependencies (Tcl/Tk) automatically. Without this flag, you'll need to install Tcl/Tk manually if you want the GUI browser.
+
+### Test the Build
+
+```bash
+# Test the executable (path depends on OS and build type)
+WNHOME=. ./build/build/Release/src/wn test -over
+```
+
+## Alternative: Manual CMake Build (Not Recommended)
+
+If you prefer to manage dependencies manually and not use Conan:
+
+```bash
+# Prerequisites: Install CMake, Ninja, and a C compiler manually
+# On Ubuntu: sudo apt-get install cmake ninja-build gcc tcl-dev tk-dev
+# On macOS: brew install cmake ninja tcl-tk
+# On Windows: choco install cmake ninja
+
 # Create build directory
 mkdir build
 cd build
@@ -29,34 +64,22 @@ ninja
 WNHOME=.. ./src/wn test -over
 ```
 
-### Option 2: Build with Conan
-
-```bash
-# Install Conan if not already installed
-pip install conan
-
-# Detect/create default profile
-conan profile detect --force
-
-# Build with Conan
-conan build . -of build
-```
+**⚠️ Note:** The manual CMake approach requires you to install all dependencies yourself. Using Conan is strongly recommended as it handles all dependencies automatically and provides a consistent build experience across platforms.
 
 ## Installation
 
-After building, you can install WordNet to the default location:
+After building with Conan, you can install WordNet:
 
 ```bash
-cd build
-ninja install
+cd build/build/Release
+cmake --install . --prefix /path/to/install
 ```
 
-Or install to a custom location:
+Or to install to the default location (/usr/local/WordNet-3.0):
 
 ```bash
-cd build
-cmake -DCMAKE_INSTALL_PREFIX=/path/to/install ..
-ninja install
+cd build/build/Release
+sudo cmake --install .
 ```
 
 ## Environment Variables
@@ -70,9 +93,16 @@ After installation, set the following environment variables:
 
 The old GNU Autotools build system (configure, Makefile.am, etc.) has been replaced with:
 
+- **Conan**: Modern package manager that handles all dependencies and build tools
 - **CMakeLists.txt**: Modern CMake build configuration
-- **conanfile.py**: Conan package manager integration
-- **Ninja**: Fast, parallel build system
+- **Ninja**: Fast, parallel build system (managed by Conan)
+
+## Why Conan?
+
+- **No manual dependency installation**: Conan automatically installs CMake, Ninja, and other build tools
+- **Cross-platform consistency**: Same build commands work on Linux, macOS, and Windows
+- **Reproducible builds**: Conan ensures everyone uses the same tool versions
+- **No need for apt-get, brew, or choco**: Conan handles system dependencies automatically
 
 ## Components Built
 
@@ -84,5 +114,6 @@ The old GNU Autotools build system (configure, Makefile.am, etc.) has been repla
 ## Notes
 
 - The Tcl/Tk GUI browser (`wishwn`) is optional and will only be built if Tcl/Tk libraries are detected
-- Dictionary files are still located in the `dict/` directory
-- The build system is backwards compatible with the same runtime behavior
+- Conan will attempt to install Tcl/Tk automatically on Linux and macOS
+- Dictionary files are located in the `dict/` directory
+- The build system maintains backwards compatibility with the same runtime behavior

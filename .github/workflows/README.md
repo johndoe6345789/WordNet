@@ -17,9 +17,10 @@ This directory contains GitHub Actions workflows for continuous integration and 
 - Uploads build artifacts for inspection
 
 **Platform-specific details:**
-- **Linux**: Uses apt-get to install CMake, Ninja, GCC, and Tcl/Tk
-- **macOS**: Uses Homebrew to install dependencies
-- **Windows**: Uses Chocolatey to install CMake and Ninja
+- **All platforms**: Use Conan package manager to install CMake, Ninja, and handle dependencies
+- **Linux**: Conan installs system dependencies (Tcl/Tk) via apt-get automatically
+- **macOS**: Conan installs system dependencies via Homebrew automatically
+- **Windows**: Dependencies are managed by Conan
 
 ### 2. Release Workflow (`release.yml`)
 

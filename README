@@ -81,21 +81,26 @@ http://wordnet.princeton.edu/obtain
 The Windows package is a self-extracting archive that installs itself
 when you double-click on it.
 
-Beginning with Version 2.1, we changed the Unix package to a GNU Autotools
-package.  The WordNet browser makes use of the open source Tcl and Tk
-packages. Many systems come with either or both pre-installed.  If
-your system doesn't (some systems have Tcl installed, but not Tk)
-Tcl/Tk can be downloaded from:
+Beginning with Version 2.1, the Unix package used GNU Autotools. 
 
-http://www.tcl.tk/ 
+**Modern Build System (WordNet 3.0):**
+WordNet 3.0 now uses Conan package manager for streamlined, cross-platform builds.
+Conan automatically handles all dependencies including CMake, Ninja, and build tools.
 
-Tcl and Tk must be installed BEFORE you compile WordNet. You must also
-have a C compiler before installing Tcl/Tk or WordNet.  WordNet has
-been built and tested with the GNU gcc compiler.  This is
-pre-installed on most Unix systems, and can be downloaded from:
+Quick Start:
+- Install Conan: pip install conan
+- Build: conan build . -of build
+- See BUILD.md for complete instructions
 
-http://gcc.gnu.org/
+The WordNet browser makes use of the open source Tcl and Tk packages for the GUI.
+When using Conan, these dependencies are managed automatically on Linux and macOS.
 
-See the file INSTALL for detailed WordNet installation instructions.
+**Legacy Installation:**
+For manual installation without Conan, you must install dependencies yourself:
+- Tcl/Tk: http://www.tcl.tk/ 
+- GCC compiler: http://gcc.gnu.org/
+
+See the file BUILD.md for modern Conan-based build instructions, or INSTALL for 
+legacy GNU Autotools instructions (deprecated).
 
 
