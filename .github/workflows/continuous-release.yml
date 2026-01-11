@@ -67,6 +67,7 @@ jobs:
     
     - name: Build and test
       if: steps.check_commits.outputs.has_changes == 'true'
+      id: build_test
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
@@ -75,7 +76,9 @@ jobs:
         WNHOME=.. ./src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
         cat test_output.txt
         if [ "${TEST_EXIT:-0}" -ne 0 ]; then
-          echo "Warning: Test command returned exit code ${TEST_EXIT:-0}, but proceeding with release"
+          echo "Error: Test command returned exit code ${TEST_EXIT:-0}"
+          echo "Automated release requires passing tests. Please fix the issues and try again."
+          exit 1
         else
           echo "✓ Tests completed successfully"
         fi

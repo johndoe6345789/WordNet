@@ -16,23 +16,11 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release - ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact_name: wordnet-linux-x64
-            asset_extension: tar.gz
-          - os: macos-latest
-            artifact_name: wordnet-macos-x64
-            asset_extension: tar.gz
-          - os: windows-latest
-            artifact_name: wordnet-windows-x64
-            asset_extension: zip
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     
     steps:
     - name: Checkout repository
@@ -42,7 +30,6 @@ jobs:
     
     - name: Get version
       id: get_version
-      shell: bash
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
@@ -50,47 +37,7 @@ jobs:
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
     
-    - name: Install dependencies (Ubuntu)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
-    
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew install cmake ninja tcl-tk
-    
-    - name: Install dependencies (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        choco install cmake ninja
-    
-    - name: Configure CMake
-      run: |
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
-    
-    - name: Build
-      run: |
-        cmake --build build --config Release
-    
-    - name: Install
-      run: |
-        cmake --install build
-    
-    - name: Package (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        tar -czf ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }} -C install .
-    
-    - name: Package (Windows)
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        Compress-Archive -Path install\* -DestinationPath ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }}
-    
     - name: Generate Release Notes
-      if: matrix.os == 'ubuntu-latest'
       shell: bash
       run: |
         VERSION="${{ steps.get_version.outputs.version }}"
@@ -132,11 +79,80 @@ jobs:
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: WordNet ${{ steps.get_version.outputs.version }}
-        body_path: ${{ matrix.os == 'ubuntu-latest' && 'release_notes.md' || '' }}
+        body_path: release_notes.md
         draft: false
         prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-upload:
+    name: Build - ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: wordnet-linux-x64
+            asset_extension: tar.gz
+          - os: macos-latest
+            artifact_name: wordnet-macos-x64
+            asset_extension: tar.gz
+          - os: windows-latest
+            artifact_name: wordnet-windows-x64
+            asset_extension: zip
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja tcl-tk
+    
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake ninja
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Install
+      run: |
+        cmake --install build
+    
+    - name: Package (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        tar -czf ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }} -C install .
+    
+    - name: Package (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Compress-Archive -Path install\* -DestinationPath ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }}
+    
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create-release.outputs.version }}
         files: |
-          ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }}
+          ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }}
         fail_on_unmatched_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

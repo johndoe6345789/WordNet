@@ -50,7 +50,14 @@ jobs:
       if: runner.os != 'Windows'
       working-directory: build
       run: |
-        WNHOME=.. ./src/wn test -over || true
+        echo "Testing WordNet executable..."
+        WNHOME=.. ./src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        cat test_output.txt
+        if [ "${TEST_EXIT:-0}" -ne 0 ]; then
+          echo "Warning: Test command returned exit code ${TEST_EXIT:-0}"
+        else
+          echo "✓ Tests completed successfully"
+        fi
     
     - name: Test (Windows)
       if: runner.os == 'Windows'
