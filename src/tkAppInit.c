@@ -17,6 +17,10 @@
 #include <locale.h>
 #include <math.h>
 
+#ifndef _ANSI_ARGS_
+#define _ANSI_ARGS_(x) x
+#endif
+
 /*
  * The following variable is a special hack that is needed in order for
  * Sun shared libraries to be used for Tcl.
