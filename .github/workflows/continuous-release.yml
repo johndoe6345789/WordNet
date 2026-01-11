@@ -1,0 +1,109 @@
+name: Continuous Release
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a release'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    name: Check for changes and create release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Check for new commits
+      id: check_commits
+      run: |
+        # Get the latest tag
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        if [ -z "$LATEST_TAG" ]; then
+          echo "No tags found, will create first release"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "new_version=v3.0.0" >> $GITHUB_OUTPUT
+        else
+          # Check if there are commits since the last tag
+          COMMITS_SINCE_TAG=$(git rev-list ${LATEST_TAG}..HEAD --count)
+          
+          if [ "$COMMITS_SINCE_TAG" -gt 0 ]; then
+            echo "Found $COMMITS_SINCE_TAG commits since $LATEST_TAG"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            
+            # Generate new version (increment patch version)
+            VERSION=${LATEST_TAG#v}
+            IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+            MAJOR=${VERSION_PARTS[0]}
+            MINOR=${VERSION_PARTS[1]:-0}
+            PATCH=${VERSION_PARTS[2]:-0}
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "No commits since $LATEST_TAG, skipping release"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+    
+    - name: Install dependencies
+      if: steps.check_commits.outputs.has_changes == 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gcc
+    
+    - name: Build and test
+      if: steps.check_commits.outputs.has_changes == 'true'
+      id: build_test
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release
+        echo "Testing WordNet executable..."
+        echo "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
+        WNHOME=$(pwd) $(pwd)/build/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        cat test_output.txt
+        if [ "${TEST_EXIT:-0}" -ne 0 ]; then
+          echo "Error: Test command returned exit code ${TEST_EXIT:-0}"
+          echo "Automated release requires passing tests. Please fix the issues and try again."
+          exit 1
+        else
+          echo "✓ Tests completed successfully"
+        fi
+    
+    - name: Create and push tag
+      if: steps.check_commits.outputs.has_changes == 'true' && (github.event_name == 'schedule' || inputs.create_release)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        NEW_VERSION="${{ steps.check_commits.outputs.new_version }}"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Create annotated tag
+        git tag -a "$NEW_VERSION" -m "Automated release $NEW_VERSION"
+        
+        # Push tag
+        git push origin "$NEW_VERSION"
+    
+    - name: Summary
+      run: |
+        if [ "${{ steps.check_commits.outputs.has_changes }}" = "true" ]; then
+          echo "✅ Changes detected, created release ${{ steps.check_commits.outputs.new_version }}"
+        else
+          echo "ℹ️ No changes since last release, skipping"
+        fi

@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v3.0.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Generate Release Notes
+      shell: bash
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        
+        # Get the last tag (excluding the current one)
+        LAST_TAG=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1 || echo "")
+        
+        # Create release notes header
+        cat > release_notes.md << EOF
+        ## WordNet ${VERSION}
+        
+        ### Changes
+        
+        EOF
+        
+        # Add commit list
+        if [ -z "$LAST_TAG" ]; then
+          # No previous tag, get all commits (limited to 20)
+          git log --oneline --no-decorate | head -20 >> release_notes.md
+        else
+          # Get commits since last tag
+          git log ${LAST_TAG}..HEAD --oneline --no-decorate >> release_notes.md
+        fi
+        
+        # Add footer
+        cat >> release_notes.md << EOF
+        
+        ### Installation
+        
+        Download the appropriate binary for your platform and follow the installation instructions in the README.
+        
+        ### Documentation
+        
+        See the included documentation or visit https://wordnet.princeton.edu for more information.
+        EOF
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: WordNet ${{ steps.get_version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-upload:
+    name: Build - ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: wordnet-linux-x64
+            asset_extension: tar.gz
+          - os: macos-latest
+            artifact_name: wordnet-macos-x64
+            asset_extension: tar.gz
+          - os: windows-latest
+            artifact_name: wordnet-windows-x64
+            asset_extension: zip
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja tcl-tk
+    
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake ninja
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Install
+      run: |
+        cmake --install build
+    
+    - name: Package (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        tar -czf ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }} -C install .
+    
+    - name: Package (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Compress-Archive -Path install\* -DestinationPath ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }}
+    
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create-release.outputs.version }}
+        files: |
+          ${{ matrix.artifact_name }}-${{ needs.create-release.outputs.version }}.${{ matrix.asset_extension }}
+        fail_on_unmatched_files: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
