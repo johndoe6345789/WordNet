@@ -73,7 +73,7 @@ jobs:
         cmake --build build --config Release
         echo "Testing WordNet executable..."
         echo "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
-        WNHOME=$(pwd) ./build/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        WNHOME=$(pwd) $(pwd)/build/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
         cat test_output.txt
         if [ "${TEST_EXIT:-0}" -ne 0 ]; then
           echo "Error: Test command returned exit code ${TEST_EXIT:-0}"

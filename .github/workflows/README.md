@@ -7,7 +7,7 @@ This directory contains GitHub Actions workflows for continuous integration and 
 ### 1. CI Workflow (`ci.yml`)
 
 **Triggers:**
-- Push to `main`, `master`, `develop`, or `copilot/**` branches
+- Push to `main`, `master`, or `develop` branches
 - Pull requests to `main`, `master`, or `develop` branches
 - Manual workflow dispatch
 
