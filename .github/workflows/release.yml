@@ -98,21 +98,25 @@ jobs:
         # Get the last tag (if any)
         LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         
-        if [ -z "$LAST_TAG" ]; then
-          # No previous tag, get all commits
-          COMMITS=$(git log --oneline --no-decorate | head -20)
-        else
-          # Get commits since last tag
-          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --no-decorate)
-        fi
-        
-        # Create release notes
-        cat > release_notes.md << 'EOFNOTES'
-        ## WordNet $VERSION
+        # Create release notes header
+        cat > release_notes.md << EOF
+        ## WordNet ${VERSION}
         
         ### Changes
         
-        $COMMITS
+        EOF
+        
+        # Add commit list
+        if [ -z "$LAST_TAG" ]; then
+          # No previous tag, get all commits (limited to 20)
+          git log --oneline --no-decorate | head -20 >> release_notes.md
+        else
+          # Get commits since last tag
+          git log ${LAST_TAG}..HEAD --oneline --no-decorate >> release_notes.md
+        fi
+        
+        # Add footer
+        cat >> release_notes.md << EOF
         
         ### Installation
         
@@ -121,11 +125,7 @@ jobs:
         ### Documentation
         
         See the included documentation or visit https://wordnet.princeton.edu for more information.
-        EOFNOTES
-        
-        # Replace placeholders
-        sed -i "s/\$VERSION/${VERSION}/g" release_notes.md
-        sed -i "s/\$COMMITS/${COMMITS}/g" release_notes.md
+        EOF
     
     - name: Create Release
       uses: softprops/action-gh-release@v1

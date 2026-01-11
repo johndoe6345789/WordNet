@@ -71,7 +71,14 @@ jobs:
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
         cd build
-        WNHOME=.. ./src/wn test -over || true
+        echo "Testing WordNet executable..."
+        WNHOME=.. ./src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        cat test_output.txt
+        if [ "${TEST_EXIT:-0}" -ne 0 ]; then
+          echo "Warning: Test command returned exit code ${TEST_EXIT:-0}, but proceeding with release"
+        else
+          echo "✓ Tests completed successfully"
+        fi
     
     - name: Create and push tag
       if: steps.check_commits.outputs.has_changes == 'true' && (github.event_name == 'schedule' || inputs.create_release)

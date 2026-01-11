@@ -55,10 +55,11 @@ jobs:
     - name: Test (Windows)
       if: runner.os == 'Windows'
       working-directory: build
-      shell: cmd
+      shell: pwsh
       run: |
-        set WNHOME=..
-        src\wn.exe test -over || exit 0
+        $env:WNHOME = ".."
+        & .\src\wn.exe test -over
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Test command returned non-zero exit code: $LASTEXITCODE" }
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
