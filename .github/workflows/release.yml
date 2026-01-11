@@ -16,12 +16,23 @@ permissions:
   contents: write
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
+  build-and-release:
+    name: Build and Release - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: wordnet-linux-x64
+            asset_extension: tar.gz
+          - os: macos-latest
+            artifact_name: wordnet-macos-x64
+            asset_extension: tar.gz
+          - os: windows-latest
+            artifact_name: wordnet-windows-x64
+            asset_extension: zip
     
     steps:
     - name: Checkout repository
@@ -31,83 +42,13 @@ jobs:
     
     - name: Get version
       id: get_version
+      shell: bash
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
         else
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
-    
-    - name: Generate Release Notes
-      id: release_notes
-      run: |
-        VERSION="${{ steps.get_version.outputs.version }}"
-        echo "Generating release notes for ${VERSION}"
-        
-        # Get the last tag (if any)
-        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-        
-        if [ -z "$LAST_TAG" ]; then
-          # No previous tag, get all commits
-          COMMITS=$(git log --oneline --no-decorate)
-        else
-          # Get commits since last tag
-          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --no-decorate)
-        fi
-        
-        # Create release notes
-        cat > release_notes.md << EOF
-        ## WordNet ${VERSION}
-        
-        ### Changes
-        
-        ${COMMITS}
-        
-        ### Installation
-        
-        Download the appropriate binary for your platform and follow the installation instructions in the README.
-        
-        ### Documentation
-        
-        See the included documentation or visit https://wordnet.princeton.edu for more information.
-        EOF
-        
-        echo "Release notes generated successfully"
-    
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: WordNet ${{ steps.get_version.outputs.version }}
-        body_path: release_notes.md
-        draft: false
-        prerelease: false
-
-  build-and-upload:
-    name: Build and Upload - ${{ matrix.os }}
-    needs: create-release
-    runs-on: ${{ matrix.os }}
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact_name: wordnet-linux-x64
-            asset_name: wordnet-${{ needs.create-release.outputs.version }}-linux-x64.tar.gz
-          - os: macos-latest
-            artifact_name: wordnet-macos-x64
-            asset_name: wordnet-${{ needs.create-release.outputs.version }}-macos-x64.tar.gz
-          - os: windows-latest
-            artifact_name: wordnet-windows-x64
-            asset_name: wordnet-${{ needs.create-release.outputs.version }}-windows-x64.zip
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
     
     - name: Install dependencies (Ubuntu)
       if: runner.os == 'Linux'
@@ -140,20 +81,62 @@ jobs:
     - name: Package (Unix)
       if: runner.os != 'Windows'
       run: |
-        tar -czf ${{ matrix.asset_name }} -C install .
+        tar -czf ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }} -C install .
     
     - name: Package (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Compress-Archive -Path install\* -DestinationPath ${{ matrix.asset_name }}
+        Compress-Archive -Path install\* -DestinationPath ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }}
     
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
+    - name: Generate Release Notes
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        
+        # Get the last tag (if any)
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$LAST_TAG" ]; then
+          # No previous tag, get all commits
+          COMMITS=$(git log --oneline --no-decorate | head -20)
+        else
+          # Get commits since last tag
+          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --no-decorate)
+        fi
+        
+        # Create release notes
+        cat > release_notes.md << 'EOFNOTES'
+        ## WordNet $VERSION
+        
+        ### Changes
+        
+        $COMMITS
+        
+        ### Installation
+        
+        Download the appropriate binary for your platform and follow the installation instructions in the README.
+        
+        ### Documentation
+        
+        See the included documentation or visit https://wordnet.princeton.edu for more information.
+        EOFNOTES
+        
+        # Replace placeholders
+        sed -i "s/\$VERSION/${VERSION}/g" release_notes.md
+        sed -i "s/\$COMMITS/${COMMITS}/g" release_notes.md
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: WordNet ${{ steps.get_version.outputs.version }}
+        body_path: ${{ matrix.os == 'ubuntu-latest' && 'release_notes.md' || '' }}
+        draft: false
+        prerelease: false
+        files: |
+          ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.version }}.${{ matrix.asset_extension }}
+        fail_on_unmatched_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.asset_name }}
-        asset_name: ${{ matrix.asset_name }}
-        asset_content_type: application/octet-stream
