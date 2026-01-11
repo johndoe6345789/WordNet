@@ -51,6 +51,7 @@ jobs:
       working-directory: build
       run: |
         echo "Testing WordNet executable..."
+        echo "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
         WNHOME=.. ./src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
         cat test_output.txt
         if [ "${TEST_EXIT:-0}" -ne 0 ]; then
@@ -64,6 +65,8 @@ jobs:
       working-directory: build
       shell: pwsh
       run: |
+        Write-Host "Testing WordNet executable..."
+        Write-Host "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
         $env:WNHOME = ".."
         & .\src\wn.exe test -over
         if ($LASTEXITCODE -ne 0) { Write-Warning "Test command returned non-zero exit code: $LASTEXITCODE" }
