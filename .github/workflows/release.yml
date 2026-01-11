@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v3.0.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        echo "Generating release notes for ${VERSION}"
+        
+        # Get the last tag (if any)
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$LAST_TAG" ]; then
+          # No previous tag, get all commits
+          COMMITS=$(git log --oneline --no-decorate)
+        else
+          # Get commits since last tag
+          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline --no-decorate)
+        fi
+        
+        # Create release notes
+        cat > release_notes.md << EOF
+        ## WordNet ${VERSION}
+        
+        ### Changes
+        
+        ${COMMITS}
+        
+        ### Installation
+        
+        Download the appropriate binary for your platform and follow the installation instructions in the README.
+        
+        ### Documentation
+        
+        See the included documentation or visit https://wordnet.princeton.edu for more information.
+        EOF
+        
+        echo "Release notes generated successfully"
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: WordNet ${{ steps.get_version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+
+  build-and-upload:
+    name: Build and Upload - ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: wordnet-linux-x64
+            asset_name: wordnet-${{ needs.create-release.outputs.version }}-linux-x64.tar.gz
+          - os: macos-latest
+            artifact_name: wordnet-macos-x64
+            asset_name: wordnet-${{ needs.create-release.outputs.version }}-macos-x64.tar.gz
+          - os: windows-latest
+            artifact_name: wordnet-windows-x64
+            asset_name: wordnet-${{ needs.create-release.outputs.version }}-windows-x64.zip
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja tcl-tk
+    
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake ninja
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Install
+      run: |
+        cmake --install build
+    
+    - name: Package (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        tar -czf ${{ matrix.asset_name }} -C install .
+    
+    - name: Package (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Compress-Archive -Path install\* -DestinationPath ${{ matrix.asset_name }}
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./${{ matrix.asset_name }}
+        asset_name: ${{ matrix.asset_name }}
+        asset_content_type: application/octet-stream

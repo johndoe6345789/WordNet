@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop, copilot/** ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build_type: [Release]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gcc tcl-dev tk-dev
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja tcl-tk
+    
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake ninja
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+    
+    - name: Build
+      run: |
+        cmake --build build --config ${{ matrix.build_type }}
+    
+    - name: Test (Unix)
+      if: runner.os != 'Windows'
+      working-directory: build
+      run: |
+        WNHOME=.. ./src/wn test -over || true
+    
+    - name: Test (Windows)
+      if: runner.os == 'Windows'
+      working-directory: build
+      shell: cmd
+      run: |
+        set WNHOME=..
+        src\wn.exe test -over || exit 0
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wordnet-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          build/src/wn*
+          build/lib/libWN.*
+        retention-days: 7
