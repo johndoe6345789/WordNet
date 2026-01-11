@@ -2,7 +2,7 @@ name: Continuous Release
 
 on:
   schedule:
-    # Run weekly on Monday at 00:00 UTC
+    # Run every Monday at 00:00 UTC
     - cron: '0 0 * * 1'
   workflow_dispatch:
     inputs:
@@ -71,10 +71,9 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
-        cd build
         echo "Testing WordNet executable..."
         echo "Running smoke test: 'wn test -over' performs an overview search on the word 'test'"
-        WNHOME=.. ./src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
+        WNHOME=$(pwd) ./build/src/wn test -over > test_output.txt 2>&1 || TEST_EXIT=$?
         cat test_output.txt
         if [ "${TEST_EXIT:-0}" -ne 0 ]; then
           echo "Error: Test command returned exit code ${TEST_EXIT:-0}"

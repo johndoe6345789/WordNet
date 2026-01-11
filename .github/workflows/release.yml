@@ -42,8 +42,8 @@ jobs:
       run: |
         VERSION="${{ steps.get_version.outputs.version }}"
         
-        # Get the last tag (if any)
-        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        # Get the last tag (excluding the current one)
+        LAST_TAG=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1 || echo "")
         
         # Create release notes header
         cat > release_notes.md << EOF
