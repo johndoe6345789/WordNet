@@ -37,7 +37,8 @@ That's it! Conan will automatically:
 
 ```bash
 # Test the executable
-# Note: Conan creates nested directories (build/build/Release) for build artifacts
+# Note: Conan uses cmake_layout() which creates a nested directory structure
+# The build output is in: build/build/<BuildType>/
 WNHOME=. ./build/build/Release/src/wn test -over
 
 # On Windows, the path would be:

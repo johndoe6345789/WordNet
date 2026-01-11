@@ -33,14 +33,15 @@ class WordNetConan(ConanFile):
         
         if install_mode:
             # Install Tcl/Tk development libraries for GUI support
-            apt = Apt(self)
-            apt.install(["tcl-dev", "tk-dev"], update=True, check=False)
-            
-            brew = Brew(self)
-            brew.install(["tcl-tk"], check=False)
-        
-        # Windows typically doesn't need system packages for Tcl/Tk
-        # Users can install separately if needed for GUI
+            # Only instantiate package managers for the current platform
+            if self.settings.os == "Linux":
+                apt = Apt(self)
+                apt.install(["tcl-dev", "tk-dev"], update=True, check=False)
+            elif self.settings.os == "Macos":
+                brew = Brew(self)
+                brew.install(["tcl-tk"], check=False)
+            # Windows typically doesn't need system packages for Tcl/Tk
+            # Users can install separately if needed for GUI
     
     def generate(self):
         tc = CMakeToolchain(self)
