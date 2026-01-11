@@ -14,8 +14,6 @@
 #include <tk.h>
 #include <wn.h>
 
-static char *Id = "$Id: stubs.c,v 1.7 2005/04/29 19:01:57 wn Exp $";
-
 static char resultbuf[SEARCHBUF];
 
 #ifndef HAVE_LANGINFO_CODESET
@@ -39,6 +37,7 @@ int wn_findvalidsearches (ClientData clientData, Tcl_Interp *interp,
    static char bitfieldstr[32];
    char *morph;
    int pos;
+   (void)clientData;
    if (argc != 3) {
       Tcl_SetResult(interp,
          "usage: findvalidsearches searchword partofspeechnum", TCL_STATIC);
@@ -51,7 +50,7 @@ int wn_findvalidsearches (ClientData clientData, Tcl_Interp *interp,
          bitfield |= is_defined (morph, pos);
       } while ((morph = morphstr (NULL, pos)) != NULL);
    }
-   sprintf (bitfieldstr, "%u", bitfield);
+   snprintf (bitfieldstr, sizeof(bitfieldstr), "%u", bitfield);
    Tcl_SetResult(interp, bitfieldstr, TCL_VOLATILE);
    return TCL_OK;
 }
@@ -68,13 +67,14 @@ int wn_bit (ClientData clientData, Tcl_Interp *interp,
    unsigned int bitfield;
    static char bitfieldstr[32];
    int whichbit;
+   (void)clientData;
    if (argc != 2) {
       Tcl_SetResult(interp, "usage: bit bitnum", TCL_STATIC);
       return TCL_ERROR;
    }
    whichbit = atoi (argv[1]);
    bitfield = bit (whichbit);
-   sprintf (bitfieldstr, "%u", bitfield);
+   snprintf (bitfieldstr, sizeof(bitfieldstr), "%u", bitfield);
    Tcl_SetResult(interp, bitfieldstr, TCL_VOLATILE);
    return TCL_OK;
 } 
@@ -88,6 +88,7 @@ int wn_search (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
    int pos, searchtype, sense;
    char *morph;
+   (void)clientData;
    if (argc != 5) {
       Tcl_SetResult(interp,
          "usage: search searchword partofspeechnum searchtypenum sensenum",
@@ -114,6 +115,7 @@ int wn_search (ClientData clientData, Tcl_Interp *interp,
  
 int wn_glosses (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 2) {
       Tcl_SetResult(interp, "usage: glosses [1 | 0]", TCL_STATIC);
       return TCL_ERROR;
@@ -129,6 +131,7 @@ int wn_glosses (ClientData clientData, Tcl_Interp *interp,
  
 int wn_fileinfo (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 2) {
       Tcl_SetResult(interp, "usage: fileinfo [1 | 0]", TCL_STATIC);
       return TCL_ERROR;
@@ -144,6 +147,7 @@ int wn_fileinfo (ClientData clientData, Tcl_Interp *interp,
  
 int wn_byteoffset (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 2) {
       Tcl_SetResult(interp, "usage: byteoffset [1 | 0]", TCL_STATIC);
       return TCL_ERROR;
@@ -159,6 +163,7 @@ int wn_byteoffset (ClientData clientData, Tcl_Interp *interp,
  
 int wn_senseflag (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 2) {
       Tcl_SetResult(interp, "usage: senseflag [1 | 0]", TCL_STATIC);
       return TCL_ERROR;
@@ -175,6 +180,7 @@ int wn_senseflag (ClientData clientData, Tcl_Interp *interp,
 int wn_contextualhelp (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
    int pos, searchtype;
+   (void)clientData;
    if (argc != 3) {
       Tcl_SetResult(interp,
          "usage: contextualhelp partofspeechnum searchtypenum", TCL_STATIC);
@@ -191,6 +197,7 @@ int wn_contextualhelp (ClientData clientData, Tcl_Interp *interp,
 
 int wn_reopendb (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 1) {
       Tcl_SetResult(interp, "usage: reopendb", TCL_STATIC);
       return TCL_ERROR;
@@ -205,6 +212,7 @@ int wn_reopendb (ClientData clientData, Tcl_Interp *interp,
 
 int wn_abortsearch (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
+   (void)clientData;
    if (argc != 1) {
       Tcl_SetResult(interp, "usage: abortsearch", TCL_STATIC);
       return TCL_ERROR;
