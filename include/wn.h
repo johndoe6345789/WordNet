@@ -434,7 +434,7 @@ extern int strstr_getnext (void);
 
 /* General purpose binary search function to search for key as first
    item on line in open file.  Item is delimited by space. */
-extern char *bin_search(char *, FILE *);
+extern char *bin_search(const char *, FILE *);
 extern char *read_index(long, FILE *);
 
 /* Copy contents from one file to another. */
@@ -442,11 +442,11 @@ extern void copyfile(FILE *, FILE *);
 
 /* Function to replace a line in a file.  Returns the original line,
    or NULL in case of error. */
-extern char *replace_line(char *, char *, FILE *);
+extern char *replace_line(const char *, const char *, FILE *);
 
 /* Find location to insert line at in file.  If line with this
    key is already in file, return NULL. */
-extern char *insert_line(char *, char *, FILE *);
+extern char *insert_line(const char *, const char *, FILE *);
 
 #ifdef __cplusplus
 }

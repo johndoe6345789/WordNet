@@ -125,14 +125,14 @@ IndexPtr parse_index(long offset, int dbase, char *line) {
     /* set offset of entry in index file */
     idx->idxoffset = offset;
     
-    idx->wd='\0';
-    idx->pos='\0';
+    idx->wd = NULL;
+    idx->pos = NULL;
     idx->off_cnt=0;
     idx->tagged_cnt = 0;
     idx->sense_cnt=0;
-    idx->offset='\0';
+    idx->offset = NULL;
     idx->ptruse_cnt=0;
-    idx->ptruse='\0';
+    idx->ptruse = NULL;
     
     /* get the word */
     ptrtok=strtok(line," \n");
@@ -292,20 +292,20 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     synptr->hereiam = 0;
     synptr->sstype = DONT_KNOW;
     synptr->fnum = 0;
-    synptr->pos = '\0';
+    synptr->pos = NULL;
     synptr->wcount = 0;
-    synptr->words = '\0';
+    synptr->words = NULL;
     synptr->whichword = 0;
     synptr->ptrcount = 0;
-    synptr->ptrtyp = '\0';
-    synptr->ptroff = '\0';
-    synptr->ppos = '\0';
-    synptr->pto = '\0';
-    synptr->pfrm = '\0';
+    synptr->ptrtyp = NULL;
+    synptr->ptroff = NULL;
+    synptr->ppos = NULL;
+    synptr->pto = NULL;
+    synptr->pfrm = NULL;
     synptr->fcount = 0;
-    synptr->frmid = '\0';
-    synptr->frmto = '\0';
-    synptr->defn = '\0';
+    synptr->frmid = NULL;
+    synptr->frmto = NULL;
+    synptr->defn = NULL;
     synptr->key = 0;
     synptr->nextss = NULL;
     synptr->nextform = NULL;
@@ -322,7 +322,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
 
     /* sanity check - make sure starting file offset matches first field */
     if (synptr->hereiam != loc) {
-	sprintf(msgbuf, "WordNet library error: no synset at location %d\n",
+	sprintf(msgbuf, "WordNet library error: no synset at location %ld\n",
 		loc);
 	display_message(msgbuf);
 	free(synptr);
@@ -469,7 +469,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     }
 
     if (keyindexfp) { 		/* we have unique keys */
-	sprintf(tmpbuf, "%c:%8.8d", partchars[dbase], synptr->hereiam);
+	sprintf(tmpbuf, "%c:%8.8ld", partchars[dbase], synptr->hereiam);
 	synptr->key = GetKeyForOffset(tmpbuf);
     }
 
@@ -989,7 +989,7 @@ void getexample(char *offset, char *wd)
     char sentbuf[512];
     
     if (vsentfilefp != NULL) {
-	if (line = bin_search(offset, vsentfilefp)) {
+	if ((line = bin_search(offset, vsentfilefp)) != NULL) {
 	    while(*line != ' ') 
 		line++;
 
@@ -2037,7 +2037,7 @@ static void printsynset(char *head, SynsetPtr synptr, char *tail, int definition
        by flags */
 
     if (offsetflag)		/* print synset offset */
-	sprintf(tbuf + strlen(tbuf),"{%8.8d} ", synptr->hereiam);
+	sprintf(tbuf + strlen(tbuf),"{%8.8ld} ", synptr->hereiam);
     if (fileinfoflag) {		/* print lexicographer file information */
 	sprintf(tbuf + strlen(tbuf), "<%s> ", lexfiles[synptr->fnum]);
 	prlexid = 1;		/* print lexicographer id after word */
@@ -2072,7 +2072,7 @@ static void printantsynset(SynsetPtr synptr, char *tail, int anttype, int defini
     tbuf[0] = '\0';
 
     if (offsetflag)
-	sprintf(tbuf,"{%8.8d} ", synptr->hereiam);
+	sprintf(tbuf,"{%8.8ld} ", synptr->hereiam);
     if (fileinfoflag) {
 	sprintf(tbuf + strlen(tbuf),"<%s> ", lexfiles[synptr->fnum]);
 	prlexid = 1;

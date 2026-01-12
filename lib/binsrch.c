@@ -35,7 +35,7 @@ char *read_index(long offset, FILE *fp) {
     return(line);
 }
 
-char *bin_search(char *searchkey, FILE *fp)
+char *bin_search(const char *searchkey, FILE *fp)
 {
     int c;
     long top, mid, bot, diff;
@@ -80,7 +80,7 @@ char *bin_search(char *searchkey, FILE *fp)
 
 static long offset;
 
-static int bin_search_key(char *searchkey, FILE *fp)
+static int bin_search_key(const char *searchkey, FILE *fp)
 {
     int c;
     long top, mid, bot, diff;
@@ -173,7 +173,7 @@ void copyfile(FILE *fromfp, FILE *tofp)
 /* Function to replace a line in a file.  Returns the original line,
    or NULL in case of error. */
 
-char *replace_line(char *new_line, char *searchkey, FILE *fp)
+char *replace_line(const char *new_line, const char *searchkey, FILE *fp)
 {
     FILE *tfp;			/* temporary file pointer */
 
@@ -182,11 +182,16 @@ char *replace_line(char *new_line, char *searchkey, FILE *fp)
 
     if ((tfp = tmpfile()) == NULL)
 	return(NULL);		/* could not create temp file */
-    fseek(fp, offset, 0);
+    if (fseek(fp, offset, 0) == -1) {
+	fclose(tfp);
+	return(NULL);		/* could not seek to offset */
+    }
     fgets(line, LINE_LEN, fp);	/* read original */
     copyfile(fp, tfp);
-    if (fseek(fp, offset, 0) == -1)
+    if (fseek(fp, offset, 0) == -1) {
+	fclose(tfp);
 	return(NULL);		/* could not seek to offset */
+    }
     fprintf(fp, "%s", new_line);	/* write line */
     rewind(tfp);
     copyfile(tfp, fp);
@@ -200,7 +205,7 @@ char *replace_line(char *new_line, char *searchkey, FILE *fp)
 /* Find location to insert line at in file.  If line with this
    key is already in file, return NULL. */
 
-char *insert_line(char *new_line, char *searchkey, FILE *fp)
+char *insert_line(const char *new_line, const char *searchkey, FILE *fp)
 {
     FILE *tfp;
 
@@ -209,11 +214,15 @@ char *insert_line(char *new_line, char *searchkey, FILE *fp)
     
     if ((tfp = tmpfile()) == NULL)
 	return(NULL);		/* could not create temp file */
-    if (fseek(fp, offset, 0) == -1)
+    if (fseek(fp, offset, 0) == -1) {
+	fclose(tfp);
 	return(NULL);		/* could not seek to offset */
+    }
     copyfile(fp, tfp);
-    if (fseek(fp, offset, 0) == -1)
+    if (fseek(fp, offset, 0) == -1) {
+	fclose(tfp);
 	return(NULL);		/* could not seek to offset */
+    }
     fprintf(fp, "%s", new_line);	/* write line */
     rewind(tfp);
     copyfile(tfp, fp);

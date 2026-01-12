@@ -5,6 +5,12 @@ project(WordNet VERSION 3.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# Export compile_commands.json for tooling by default.
+option(WORDNET_EXPORT_COMPILE_COMMANDS "Export compile_commands.json for tooling" ON)
+if(WORDNET_EXPORT_COMPILE_COMMANDS)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
 # Default installation prefix
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "/usr/local/WordNet-3.0" CACHE PATH "Default install path" FORCE)
@@ -20,6 +26,64 @@ include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include)
 # Add subdirectories
 add_subdirectory(lib)
 add_subdirectory(src)
+
+# Linting helpers (clang-tidy and cppcheck) if available.
+find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+find_program(CPPCHECK_EXE NAMES cppcheck)
+
+function(wordnet_collect_sources out_var target)
+    if(TARGET ${target})
+        get_target_property(_srcs ${target} SOURCES)
+        get_target_property(_src_dir ${target} SOURCE_DIR)
+        set(_abs "")
+        foreach(_src IN LISTS _srcs)
+            if(IS_ABSOLUTE "${_src}")
+                list(APPEND _abs "${_src}")
+            else()
+                list(APPEND _abs "${_src_dir}/${_src}")
+            endif()
+        endforeach()
+        set(${out_var} ${_abs} PARENT_SCOPE)
+    endif()
+endfunction()
+
+if(CLANG_TIDY_EXE OR CPPCHECK_EXE)
+    set(WORDNET_LINT_SOURCES "")
+    wordnet_collect_sources(WN_SOURCES WN)
+    wordnet_collect_sources(WN_EXE_SOURCES wn)
+    wordnet_collect_sources(WISHWN_SOURCES wishwn)
+    list(APPEND WORDNET_LINT_SOURCES ${WN_SOURCES} ${WN_EXE_SOURCES} ${WISHWN_SOURCES})
+    list(REMOVE_DUPLICATES WORDNET_LINT_SOURCES)
+endif()
+
+if(CLANG_TIDY_EXE AND WORDNET_LINT_SOURCES)
+    add_custom_target(lint-clang-tidy
+        COMMAND ${CLANG_TIDY_EXE} -p ${CMAKE_BINARY_DIR} ${WORDNET_LINT_SOURCES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running clang-tidy")
+endif()
+
+if(CPPCHECK_EXE)
+    add_custom_target(lint-cppcheck
+        COMMAND ${CPPCHECK_EXE}
+            --project=${CMAKE_BINARY_DIR}/compile_commands.json
+            --enable=warning,style,performance,portability
+            --std=c99
+            --inline-suppr
+            --suppress=missingIncludeSystem
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running cppcheck")
+endif()
+
+if(CLANG_TIDY_EXE OR CPPCHECK_EXE)
+    add_custom_target(lint)
+    if(CLANG_TIDY_EXE AND WORDNET_LINT_SOURCES)
+        add_dependencies(lint lint-clang-tidy)
+    endif()
+    if(CPPCHECK_EXE)
+        add_dependencies(lint lint-cppcheck)
+    endif()
+endif()
 
 # Install dictionary files
 install(DIRECTORY dict/ 

@@ -232,7 +232,7 @@ char *morphstr(char *origstr, int pos)
 		if (end_idx < 0) return(NULL);		/* shouldn't do this */
 		strncpy(word, str + st_idx, end_idx - st_idx);
 		word[end_idx - st_idx] = '\0';
-		if(tmp = morphword(word, pos))
+		if ((tmp = morphword(word, pos)) != NULL)
 		    strcat(searchstr,tmp);
 		else
 		    strcat(searchstr,word);
@@ -240,7 +240,7 @@ char *morphstr(char *origstr, int pos)
 		st_idx = end_idx + 1;
 	    }
 	    
-	    if(tmp = morphword(strcpy(word, str + st_idx), pos)) 
+	    if ((tmp = morphword(strcpy(word, str + st_idx), pos)) != NULL)
 		strcat(searchstr,tmp);
 	    else
 		strcat(searchstr,word);
@@ -410,7 +410,7 @@ static char *morphprep(char *s)
     rest = strchr(s, '_');
     last = strrchr(s, '_');
     if (rest != last) {		/* more than 2 words */
-	if (lastwd = morphword(last + 1, NOUN)) {
+	if ((lastwd = morphword(last + 1, NOUN)) != NULL) {
 	    strncpy(end, rest, last - rest + 1);
 	    end[last-rest+1] = '\0';
 	    strcat(end, lastwd);

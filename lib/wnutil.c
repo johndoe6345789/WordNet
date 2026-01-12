@@ -48,7 +48,7 @@ int wninit(void)
     char *env;
 
     if (!done) {
-	if (env = getenv("WNDBVERSION")) {
+	if ((env = getenv("WNDBVERSION")) != NULL) {
 	    wnrelease = strdup(env);	/* set release */
 	    assert(wnrelease);
 	}
@@ -70,7 +70,7 @@ int re_wninit(void)
 
     closefps();
 
-    if (env = getenv("WNDBVERSION")) {
+    if ((env = getenv("WNDBVERSION")) != NULL) {
 	wnrelease = strdup(env);	/* set release */
 	assert(wnrelease);
     }
@@ -89,10 +89,14 @@ static void closefps(void)
 
     if (OpenDB) {
 	for (i = 1; i < NUMPARTS + 1; i++) {
-	    if (datafps[i] != NULL)
-		fclose(datafps[i]); datafps[i] = NULL;
-	    if (indexfps[i] != NULL)
-		fclose(indexfps[i]); indexfps[i] = NULL;
+	    if (datafps[i] != NULL) {
+		fclose(datafps[i]);
+	    }
+	    datafps[i] = NULL;
+	    if (indexfps[i] != NULL) {
+		fclose(indexfps[i]);
+	    }
+	    indexfps[i] = NULL;
 	}
 	if (sensefp != NULL) {
 	    fclose(sensefp); sensefp = NULL;
@@ -550,15 +554,15 @@ char *WNSnsToStr(IndexPtr idx, int sense)
 IndexPtr GetValidIndexPointer(char *word, int pos)
 {
     IndexPtr idx;
-    char *morphword;
+    char *morph_word;
 
     idx = getindex(word, pos);
 
     if (idx == NULL) {
-	if ((morphword = morphstr(word, pos)) != NULL)
-	    while (morphword) {
-		if ((idx = getindex(morphword, pos)) != NULL) break;
-		morphword = morphstr(NULL, pos);
+	if ((morph_word = morphstr(word, pos)) != NULL)
+	    while (morph_word) {
+		if ((idx = getindex(morph_word, pos)) != NULL) break;
+		morph_word = morphstr(NULL, pos);
 	    }
     }
     return (idx);
@@ -594,7 +598,7 @@ SnsIndexPtr GetSenseIndex(char *sensekey)
 	       loc,
 	       &snsidx->wnsense,
 	       &snsidx->tag_cnt);
-	snsidx->sensekey = malloc(strlen(buf + 1));
+	snsidx->sensekey = malloc(strlen(buf) + 1);
 	assert(snsidx->sensekey);
 	strcpy(snsidx->sensekey, buf);
 	snsidx->loc = atol(loc);
@@ -650,9 +654,9 @@ char *GetOffsetForKey(unsigned int key)
 	keyindexfp = fopen(tmpbuf, "r");
     }
     if (keyindexfp) {
-	sprintf(ckey, "%6.6d", key);
+	snprintf(ckey, sizeof(ckey), "%6.6u", key);
 	if ((line = bin_search(ckey, keyindexfp)) != NULL) {
-	    sscanf(line, "%d %s", &rkey, loc);
+	    sscanf(line, "%u %10s", &rkey, loc);
 	    return(loc);
 	}
     } 
@@ -676,7 +680,7 @@ unsigned int GetKeyForOffset(char *loc)
     }
     if (revkeyindexfp) {
 	if ((line = bin_search(loc, revkeyindexfp)) != NULL) {
-	    sscanf(line, "%s %d", rloc, &key );
+	    sscanf(line, "%10s %u", rloc, &key);
 	    return(key);
 	}
     }
@@ -703,6 +707,7 @@ char *SetSearchdir()
 
 int default_display_message(char *msg)
 {
+    (void)msg;
     return(-1);
 }
 
@@ -729,4 +734,3 @@ int strstr_getnext (void) {
    strstr_stringcurrent = loc + 1;
    return (loc - strstr_stringstart);
 }
-

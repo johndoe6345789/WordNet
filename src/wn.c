@@ -217,7 +217,7 @@ static int do_search(char *searchword, int pos, int search, int whichsense,
 		     char *label)
 {
     int totsenses = 0;
-    char *morphword, *outbuf;
+    char *morph_word, *outbuf;
 
     outbuf = findtheinfo(searchword, pos, search, whichsense);
     totsenses += wnresults.printcnt;
@@ -225,14 +225,14 @@ static int do_search(char *searchword, int pos, int search, int whichsense,
 	printf("\n%s of %s %s\n%s",
 	       label, partnames[pos], searchword, outbuf);
 
-    if (morphword = morphstr(searchword, pos))
+    if ((morph_word = morphstr(searchword, pos)) != NULL)
 	do {
-	    outbuf = findtheinfo(morphword, pos, search, whichsense);
+	    outbuf = findtheinfo(morph_word, pos, search, whichsense);
 	    totsenses += wnresults.printcnt;
 	    if (strlen(outbuf) > 0) 
 		printf("\n%s of %s %s\n%s",
-		       label, partnames[pos], morphword, outbuf);
-	} while (morphword = morphstr(NULL, pos));
+		       label, partnames[pos], morph_word, outbuf);
+	} while ((morph_word = morphstr(NULL, pos)) != NULL);
 
     return(totsenses);
 }
@@ -241,7 +241,7 @@ static int do_is_defined(char *searchword)
 {
     int i, found = 0;
     unsigned int search;
-    char *morphword;
+    char *morph_word;
 
     if (searchword[0] == '-') {
 	display_message("wn: invalid search word\n");
@@ -260,15 +260,15 @@ static int do_is_defined(char *searchword)
 	    printf("\nNo information available for %s %s\n",
 		   partnames[i], searchword);
 
-	if ((morphword = morphstr(searchword, i)) != NULL)
+	if ((morph_word = morphstr(searchword, i)) != NULL)
 	    do {
-		if ((search = is_defined(morphword, i)) != 0) {
-		    printsearches(morphword, i, search);
+		if ((search = is_defined(morph_word, i)) != 0) {
+		    printsearches(morph_word, i, search);
 		    found = 1;
 		} else
 		    printf("\nNo information available for %s %s\n",
-			   partnames[i], morphword);
-	    } while ((morphword = morphstr(NULL, i)) != NULL );
+			   partnames[i], morph_word);
+	    } while ((morph_word = morphstr(NULL, i)) != NULL );
     }
     return(found);
 }
@@ -420,4 +420,3 @@ static int error_message(char *msg)
   * Initial revision
   * 
   */
-

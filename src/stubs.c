@@ -88,6 +88,7 @@ int wn_search (ClientData clientData, Tcl_Interp *interp,
    int argc, char *argv[]) {
    int pos, searchtype, sense;
    char *morph;
+   const char *info;
    (void)clientData;
    if (argc != 5) {
       Tcl_SetResult(interp,
@@ -98,10 +99,25 @@ int wn_search (ClientData clientData, Tcl_Interp *interp,
    pos = atoi (argv[2]);
    searchtype = atoi (argv[3]);
    sense = atoi (argv[4]);
-   strcpy (resultbuf, findtheinfo (argv[1], pos, searchtype, sense));
+   info = findtheinfo(argv[1], pos, searchtype, sense);
+   if (info == NULL) {
+      info = "";
+   }
+   snprintf(resultbuf, sizeof(resultbuf), "%s", info);
    if ((morph = morphstr (argv[1], pos)) != NULL) {
       do {
-         strcat (resultbuf, findtheinfo (morph, pos, searchtype, sense));
+         size_t used;
+         size_t avail;
+         info = findtheinfo(morph, pos, searchtype, sense);
+         if (info == NULL) {
+            info = "";
+         }
+         used = strlen(resultbuf);
+         if (used >= sizeof(resultbuf) - 1) {
+            break;
+         }
+         avail = sizeof(resultbuf) - used - 1;
+         strncat(resultbuf, info, avail);
       } while ((morph = morphstr (NULL, pos)) != NULL);
    }
    Tcl_SetResult(interp, resultbuf, TCL_VOLATILE);
