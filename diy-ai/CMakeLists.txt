@@ -30,4 +30,12 @@ target_include_directories(wn-meaning PRIVATE
     "${WORDNET_ROOT}/include"
 )
 
+add_executable(wn-chat chat.c)
+target_link_libraries(wn-chat WN)
+target_include_directories(wn-chat PRIVATE
+    "${WORDNET_ROOT}"
+    "${WORDNET_ROOT}/include"
+)
+
 install(TARGETS wn-meaning DESTINATION bin)
+install(TARGETS wn-chat DESTINATION bin)

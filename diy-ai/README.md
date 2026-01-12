@@ -38,3 +38,17 @@ WNHOME=/path/to/WordNet-3.0 ./build/diy-ai/wn-meaning "river of time"
 ./build/diy-ai/wn-meaning --top 8 --no-gloss "retry failed requests"
 ./build/diy-ai/wn-meaning --no-hypernyms "database latency cache"
 ```
+
+## Chat
+
+```bash
+./build/diy-ai/wn-chat
+```
+
+Inside the chat:
+
+```
+build a CLI that parses log files
+add retries and backoff for failed requests
+/exit
+```
