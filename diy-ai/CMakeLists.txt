@@ -24,6 +24,9 @@ if(NOT TARGET WN)
         "${WORDNET_ROOT}/include"
     )
 endif()
+if(PROJECT_NAME STREQUAL "WordNetDiyAi" AND TARGET WN)
+    target_compile_definitions(WN PUBLIC DEFAULTPATH="${DEFAULTPATH}")
+endif()
 
 add_executable(wn-meaning meaning.c)
 target_link_libraries(wn-meaning WN)

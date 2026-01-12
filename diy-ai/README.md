@@ -10,6 +10,7 @@ and gloss text.
 ```bash
 cmake -S . -B build
 cmake --build build --target wn-meaning
+cmake --build build --target wn-chat
 ```
 
 If you prefer building from inside `diy-ai/`:
@@ -17,6 +18,7 @@ If you prefer building from inside `diy-ai/`:
 ```bash
 cmake -S . -B .
 cmake --build . --target wn-meaning
+cmake --build . --target wn-chat
 ```
 
 ## Run

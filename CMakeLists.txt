@@ -18,13 +18,15 @@ endif()
 
 # Define DEFAULTPATH for dictionary files
 set(DEFAULTPATH "${CMAKE_INSTALL_PREFIX}/dict" CACHE STRING "Default path for WordNet data files")
-add_compile_definitions(DEFAULTPATH="${DEFAULTPATH}")
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include)
 
 # Add subdirectories
 add_subdirectory(lib)
+if(TARGET WN)
+    target_compile_definitions(WN PUBLIC DEFAULTPATH="${DEFAULTPATH}")
+endif()
 add_subdirectory(src)
 
 # Optional DIY AI demo tooling
