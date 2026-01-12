@@ -59,3 +59,12 @@ add retries and backoff for failed requests
 {"prompt":"build a CLI that parses log files","language":"python"}
 /exit
 ```
+
+## Cache
+
+Build a lightweight WordNet cache for faster sentence synthesis:
+
+```bash
+cmake --build build --target wn-cache
+./build/diy-ai/wn-cache --out word_cache.json --limit 5000
+```

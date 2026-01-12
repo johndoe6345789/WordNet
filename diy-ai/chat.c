@@ -1294,19 +1294,23 @@ static void fetch_related_terms(const char *term, int pos, SynsetPtr syn,
         if (syn->ppos[i] == 0) {
             continue;
         }
-        SynsetPtr hyper = read_synset(syn->ppos[i], syn->ptroff[i], term);
-        if (hyper != NULL) {
-            int w;
-            for (w = 0; w < hyper->wcount; w++) {
-                char hyperword[MAX_TERM];
-                snprintf(hyperword, sizeof(hyperword), "%s", hyper->words[w]);
-                normalize_word(hyperword);
-                if (!is_noise_token(hyperword)) {
-                    add_unique(related->hypernyms, &related->hypernym_count, MAX_LIST, hyperword);
-                    add_term_count(ctx, hyperword, 1);
+        {
+            char term_buf[MAX_TERM];
+            snprintf(term_buf, sizeof(term_buf), "%s", term);
+            SynsetPtr hyper = read_synset(syn->ppos[i], syn->ptroff[i], term_buf);
+            if (hyper != NULL) {
+                int w;
+                for (w = 0; w < hyper->wcount; w++) {
+                    char hyperword[MAX_TERM];
+                    snprintf(hyperword, sizeof(hyperword), "%s", hyper->words[w]);
+                    normalize_word(hyperword);
+                    if (!is_noise_token(hyperword)) {
+                        add_unique(related->hypernyms, &related->hypernym_count, MAX_LIST, hyperword);
+                        add_term_count(ctx, hyperword, 1);
+                    }
                 }
+                free_synset(hyper);
             }
-            free_synset(hyper);
         }
     }
     (void)pos;

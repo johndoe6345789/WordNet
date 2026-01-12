@@ -188,6 +188,19 @@ wn-chat/fast:
 .PHONY : wn-chat/fast
 
 #=============================================================================
+# Target rules for targets named wn-cache
+
+# Build rule for target.
+wn-cache: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 wn-cache
+.PHONY : wn-cache
+
+# fast build rule for target.
+wn-cache/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-cache.dir/build.make CMakeFiles/wn-cache.dir/build
+.PHONY : wn-cache/fast
+
+#=============================================================================
 # Target rules for targets named WN
 
 # Build rule for target.
@@ -224,6 +237,30 @@ chat.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/chat.c.s
 .PHONY : chat.c.s
 
+json_extract.o: json_extract.cpp.o
+.PHONY : json_extract.o
+
+# target to build an object file
+json_extract.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/json_extract.cpp.o
+.PHONY : json_extract.cpp.o
+
+json_extract.i: json_extract.cpp.i
+.PHONY : json_extract.i
+
+# target to preprocess a source file
+json_extract.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/json_extract.cpp.i
+.PHONY : json_extract.cpp.i
+
+json_extract.s: json_extract.cpp.s
+.PHONY : json_extract.s
+
+# target to generate assembly for a file
+json_extract.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/json_extract.cpp.s
+.PHONY : json_extract.cpp.s
+
 meaning.o: meaning.c.o
 .PHONY : meaning.o
 
@@ -248,6 +285,30 @@ meaning.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-meaning.dir/build.make CMakeFiles/wn-meaning.dir/meaning.c.s
 .PHONY : meaning.c.s
 
+wn-cache.o: wn-cache.c.o
+.PHONY : wn-cache.o
+
+# target to build an object file
+wn-cache.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-cache.dir/build.make CMakeFiles/wn-cache.dir/wn-cache.c.o
+.PHONY : wn-cache.c.o
+
+wn-cache.i: wn-cache.c.i
+.PHONY : wn-cache.i
+
+# target to preprocess a source file
+wn-cache.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-cache.dir/build.make CMakeFiles/wn-cache.dir/wn-cache.c.i
+.PHONY : wn-cache.c.i
+
+wn-cache.s: wn-cache.c.s
+.PHONY : wn-cache.s
+
+# target to generate assembly for a file
+wn-cache.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-cache.dir/build.make CMakeFiles/wn-cache.dir/wn-cache.c.s
+.PHONY : wn-cache.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -261,14 +322,21 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... WN"
+	@echo "... wn-cache"
 	@echo "... wn-chat"
 	@echo "... wn-meaning"
 	@echo "... chat.o"
 	@echo "... chat.i"
 	@echo "... chat.s"
+	@echo "... json_extract.o"
+	@echo "... json_extract.i"
+	@echo "... json_extract.s"
 	@echo "... meaning.o"
 	@echo "... meaning.i"
 	@echo "... meaning.s"
+	@echo "... wn-cache.o"
+	@echo "... wn-cache.i"
+	@echo "... wn-cache.s"
 .PHONY : help
 
 

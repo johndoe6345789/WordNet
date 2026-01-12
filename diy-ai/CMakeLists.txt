@@ -59,3 +59,10 @@ target_include_directories(wn-chat PRIVATE
 
 install(TARGETS wn-meaning DESTINATION bin)
 install(TARGETS wn-chat DESTINATION bin)
+add_executable(wn-cache wn-cache.c)
+target_link_libraries(wn-cache WN)
+target_include_directories(wn-cache PRIVATE
+    "${WORDNET_ROOT}"
+    "${WORDNET_ROOT}/include"
+)
+install(TARGETS wn-cache DESTINATION bin)

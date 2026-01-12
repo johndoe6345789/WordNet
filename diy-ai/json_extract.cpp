@@ -132,7 +132,11 @@ int load_chat_strings(const char *path)
         return 0;
     }
     buffer.resize(static_cast<size_t>(size));
-    if (fread(buffer.data(), 1, buffer.size(), fp) != buffer.size()) {
+    if (buffer.empty()) {
+        fclose(fp);
+        return 0;
+    }
+    if (fread(&buffer[0], 1, buffer.size(), fp) != buffer.size()) {
         fclose(fp);
         return 0;
     }
