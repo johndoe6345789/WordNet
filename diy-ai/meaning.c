@@ -10,6 +10,7 @@
 #define MAX_TERMS 512
 #define MAX_GLOSS 512
 #define DEFAULT_TOP 12
+#define MAX_LIST 128
 
 struct term_count {
     char term[MAX_TERM];
@@ -94,6 +95,26 @@ static void add_term(struct term_count *terms, int *term_count, const char *term
         terms[*term_count].count = weight;
         (*term_count)++;
     }
+}
+
+static int add_unique(char list[][MAX_TERM], int *count, const char *value)
+{
+    int i;
+
+    if (value == NULL || value[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; i < *count; i++) {
+        if (strcmp(list[i], value) == 0) {
+            return 0;
+        }
+    }
+    if (*count >= MAX_LIST) {
+        return 0;
+    }
+    snprintf(list[*count], MAX_TERM, "%s", value);
+    (*count)++;
+    return 1;
 }
 
 static void add_terms_from_text(struct term_count *terms, int *term_count, const char *text)
@@ -234,6 +255,46 @@ static void explain_word(const char *word, int show_gloss)
     }
 }
 
+static void json_escape(const char *text)
+{
+    const unsigned char *p = (const unsigned char *)text;
+
+    while (*p) {
+        unsigned char c = *p++;
+        if (c == '\"') {
+            printf("\\\"");
+        } else if (c == '\\') {
+            printf("\\\\");
+        } else if (c == '\n') {
+            printf("\\n");
+        } else if (c == '\r') {
+            printf("\\r");
+        } else if (c == '\t') {
+            printf("\\t");
+        } else if (c < 32) {
+            printf("\\u%04x", (unsigned int)c);
+        } else {
+            putchar((int)c);
+        }
+    }
+}
+
+static void print_json_list(char list[][MAX_TERM], int count)
+{
+    int i;
+
+    printf("[");
+    for (i = 0; i < count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"");
+        json_escape(list[i]);
+        printf("\"");
+    }
+    printf("]");
+}
+
 static void print_help(const char *prog)
 {
     printf("DIY AI Meaning Sketch (WordNet)\n");
@@ -244,10 +305,12 @@ static void print_help(const char *prog)
     printf("  --top N              Show top N meaning hints (default %d)\n", DEFAULT_TOP);
     printf("  --no-gloss           Skip per-word gloss output\n");
     printf("  --no-hypernyms       Skip hypernym expansion\n");
+    printf("  --json               Emit JSON for codegen pipelines\n");
     printf("\n");
     printf("examples:\n");
     printf("  %s \"add caching to reduce latency\"\n", prog);
     printf("  %s --top 8 --no-gloss \"retry failed requests\"\n", prog);
+    printf("  %s --json \"build a CLI for log parsing\"\n", prog);
 }
 
 static int parse_int(const char *text, int *value)
@@ -276,6 +339,19 @@ int main(int argc, char **argv)
     int show_gloss = 1;
     int use_hypernyms = 1;
     int top_n = DEFAULT_TOP;
+    int emit_json = 0;
+    char actions[MAX_LIST][MAX_TERM];
+    char entities[MAX_LIST][MAX_TERM];
+    char qualities[MAX_LIST][MAX_TERM];
+    char adverbs[MAX_LIST][MAX_TERM];
+    int action_count = 0;
+    int entity_count = 0;
+    int quality_count = 0;
+    int adverb_count = 0;
+    int verb_hits = 0;
+    int noun_hits = 0;
+    int adj_hits = 0;
+    int adv_hits = 0;
     size_t i;
     size_t j = 0;
 
@@ -295,6 +371,10 @@ int main(int argc, char **argv)
         }
         if (strcmp(argv[i], "--no-hypernyms") == 0) {
             use_hypernyms = 0;
+            continue;
+        }
+        if (strcmp(argv[i], "--json") == 0) {
+            emit_json = 1;
             continue;
         }
         if (strcmp(argv[i], "--top") == 0) {
@@ -338,7 +418,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Input: %s\n", input);
+    if (emit_json) {
+        show_gloss = 0;
+    }
+
+    if (!emit_json) {
+        printf("Input: %s\n", input);
+    }
 
     for (i = 0; i <= strlen(input); i++) {
         unsigned char c = (unsigned char)input[i];
@@ -373,6 +459,19 @@ int main(int argc, char **argv)
                         }
                         continue;
                     }
+                    if (pos == VERB) {
+                        verb_hits++;
+                        add_unique(actions, &action_count, resolved);
+                    } else if (pos == NOUN) {
+                        noun_hits++;
+                        add_unique(entities, &entity_count, resolved);
+                    } else if (pos == ADJ) {
+                        adj_hits++;
+                        add_unique(qualities, &quality_count, resolved);
+                    } else if (pos == ADV) {
+                        adv_hits++;
+                        add_unique(adverbs, &adverb_count, resolved);
+                    }
                     syn = read_synset(pos, idx->offset[0], resolved);
                     if (syn != NULL) {
                         collect_from_synset(terms, &term_count, syn);
@@ -389,10 +488,55 @@ int main(int argc, char **argv)
 
     qsort(terms, term_count, sizeof(terms[0]), compare_terms);
 
-    printf("\nMeaning hints (top terms):\n");
-    for (i = 0; i < (size_t)term_count && i < (size_t)top_n; i++) {
-        printf("  %s (%d)\n", terms[i].term, terms[i].count);
+    if (!emit_json) {
+        printf("\nMeaning hints (top terms):\n");
+        for (i = 0; i < (size_t)term_count && i < (size_t)top_n; i++) {
+            printf("  %s (%d)\n", terms[i].term, terms[i].count);
+        }
+        return 0;
     }
+
+    printf("{\n");
+    printf("  \"input\": \"");
+    json_escape(input);
+    printf("\",\n");
+    printf("  \"actions\": ");
+    print_json_list(actions, action_count);
+    printf(",\n");
+    printf("  \"entities\": ");
+    print_json_list(entities, entity_count);
+    printf(",\n");
+    printf("  \"qualities\": ");
+    print_json_list(qualities, quality_count);
+    printf(",\n");
+    printf("  \"adverbs\": ");
+    print_json_list(adverbs, adverb_count);
+    printf(",\n");
+    printf("  \"pos_summary\": {\"verbs\": %d, \"nouns\": %d, \"adjectives\": %d, \"adverbs\": %d},\n",
+           verb_hits, noun_hits, adj_hits, adv_hits);
+    printf("  \"hypernyms\": %s,\n", use_hypernyms ? "true" : "false");
+    printf("  \"top_terms\": [");
+    for (i = 0; i < (size_t)term_count && i < (size_t)top_n; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("{\"term\": \"");
+        json_escape(terms[i].term);
+        printf("\", \"score\": %d}", terms[i].count);
+    }
+    printf("],\n");
+    printf("  \"questions\": [");
+    if (action_count == 0) {
+        printf("\"What action should be performed?\"");
+    }
+    if (entity_count == 0) {
+        if (action_count > 0) {
+            printf(", ");
+        }
+        printf("\"What should the system operate on?\"");
+    }
+    printf("]\n");
+    printf("}\n");
 
     return 0;
 }
