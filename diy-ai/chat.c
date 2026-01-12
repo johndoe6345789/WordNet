@@ -47,6 +47,9 @@ struct chat_context {
     } terms[MAX_TERMS];
     int term_count;
     int turns;
+    char last_entity[MAX_TERM];
+    char last_action[MAX_TERM];
+    int last_variant;
 };
 
 struct related_term {
@@ -72,6 +75,7 @@ struct analysis_result {
     char design_focus[3][MAX_TERM];
     int design_focus_count;
     int is_question;
+    int is_preference_question;
     int domain_score;
     int has_greeting;
 };
@@ -83,13 +87,14 @@ static const char *stopwords[] = {
     "for", "from", "in", "is", "it", "of", "on", "or", "the",
     "to", "was", "were", "with", "me", "my", "your", "our",
     "should", "want", "need", "please", "make", "do", "write", "like",
+    "love", "yeah", "yea", "nice", "today", "would", "could", "can",
     NULL
 };
 
 static const char *generic_verbs[] = {
     "make", "do", "write", "build", "create", "implement",
     "develop", "add", "use", "target", "support", "provide",
-    "like", NULL
+    "like", "love", "want", "need", "think", NULL
 };
 
 static void set_default_searchdir(void)
@@ -353,6 +358,26 @@ static int is_generic_verb(const char *word)
     return 0;
 }
 
+static int is_allowed_action(const char *word)
+{
+    const char *allowed[] = {
+        "build", "make", "create", "implement", "design", "plan",
+        "draft", "write", "develop", "test", "deploy", "outline",
+        "prototype", "code", NULL
+    };
+    int i;
+
+    if (word == NULL || word[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; allowed[i] != NULL; i++) {
+        if (strcmp(word, allowed[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int token_matches(const char *token, struct concept *concept)
 {
     int i;
@@ -451,20 +476,23 @@ static const char *top_action(struct analysis_result *analysis)
     return NULL;
 }
 
-static void append_defaults(char *buf, size_t buf_size, struct chat_context *ctx)
+static void append_defaults_for(char *buf, size_t buf_size,
+                                const char *language,
+                                const char *platform,
+                                const char *framework)
 {
     size_t used = strlen(buf);
 
-    if (ctx->language[0]) {
-        snprintf(buf + used, buf_size - used, " in %s", ctx->language);
+    if (language != NULL && language[0] != '\0') {
+        snprintf(buf + used, buf_size - used, " in %s", language);
         used = strlen(buf);
     }
-    if (ctx->platform[0]) {
-        snprintf(buf + used, buf_size - used, " on %s", ctx->platform);
+    if (platform != NULL && platform[0] != '\0') {
+        snprintf(buf + used, buf_size - used, " on %s", platform);
         used = strlen(buf);
     }
-    if (ctx->framework[0]) {
-        snprintf(buf + used, buf_size - used, " with %s", ctx->framework);
+    if (framework != NULL && framework[0] != '\0') {
+        snprintf(buf + used, buf_size - used, " with %s", framework);
     }
 }
 
@@ -706,6 +734,10 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
 {
     const char *primary_entity = top_scored_entity(ctx, analysis, out_prob);
     const char *primary_action = top_action(analysis);
+    const char *fallback_action = NULL;
+    int language_only = 0;
+    int platform_only = 0;
+    const char *secondary_entity = NULL;
     const char *memory_term = top_memory_term(ctx);
     const char *synonym = NULL;
     const char *hypernym = NULL;
@@ -738,10 +770,45 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
     if (analysis->is_question) {
         primary_action = NULL;
     }
+    if (!is_allowed_action(primary_action)) {
+        primary_action = NULL;
+    }
+    if (ctx->language[0] != '\0' && primary_entity != NULL &&
+        strcmp(primary_entity, ctx->language) == 0 &&
+        analysis->entity_count <= 1) {
+        language_only = 1;
+        primary_entity = NULL;
+    }
+    if (!language_only && ctx->platform[0] != '\0' && primary_entity != NULL &&
+        strcmp(primary_entity, ctx->platform) == 0 &&
+        analysis->entity_count <= 1 && primary_action == NULL) {
+        platform_only = 1;
+        primary_entity = NULL;
+    }
+    if (primary_action == NULL && analysis->domain_score > 0 && !analysis->is_question) {
+        fallback_action = "build";
+        if (primary_entity != NULL) {
+            if (strcmp(primary_entity, "plan") == 0 || strcmp(primary_entity, "outline") == 0) {
+                fallback_action = "outline";
+            } else if (strcmp(primary_entity, "test") == 0 || strcmp(primary_entity, "testing") == 0) {
+                fallback_action = "test";
+            }
+        }
+        primary_action = fallback_action;
+    }
 
     if (primary_entity != NULL) {
         synonym = pick_related_term(analysis, primary_entity, "synonym", &synonym_count);
         hypernym = pick_related_term(analysis, primary_entity, "hypernym", &hypernym_count);
+    }
+    if (analysis->entity_count > 1) {
+        int e;
+        for (e = 0; e < analysis->entity_count; e++) {
+            if (primary_entity == NULL || strcmp(analysis->entities[e], primary_entity) != 0) {
+                secondary_entity = analysis->entities[e];
+                break;
+            }
+        }
     }
     for (i = 0; i < analysis->related_count; i++) {
         if (analysis->related[i].gloss[0] != '\0') {
@@ -754,30 +821,41 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
         shorten_gloss(gloss, gloss_short, sizeof(gloss_short));
     }
 
-    for (variant = 0; variant < 3 && !ok; variant++) {
+    for (variant = 0; variant < 4 && !ok; variant++) {
+        int pick = (ctx->last_variant + 1 + variant) % 4;
         candidate[0] = '\0';
         used = 0;
 
-        if (persona_prefix(ctx->turns, variant)[0] != '\0') {
-            snprintf(candidate + used, sizeof(candidate) - used, "%s ", persona_prefix(ctx->turns, variant));
+        if (persona_prefix(ctx->turns, pick)[0] != '\0') {
+            snprintf(candidate + used, sizeof(candidate) - used, "%s ", persona_prefix(ctx->turns, pick));
             used = strlen(candidate);
         }
 
-        if (primary_action != NULL && primary_entity != NULL) {
-            if (variant == 0) {
+        if (analysis->is_preference_question && primary_entity != NULL) {
+            snprintf(sentence, sizeof(sentence), "I don't have preferences, but I can help with %s", primary_entity);
+        } else if (language_only) {
+            snprintf(sentence, sizeof(sentence), "Got it. We'll use %s", ctx->language);
+        } else if (platform_only) {
+            snprintf(sentence, sizeof(sentence), "Got it. We'll target %s", ctx->platform);
+        } else if (primary_action != NULL && primary_entity != NULL) {
+            if (pick == 0) {
                 snprintf(sentence, sizeof(sentence), "Got it. You want to %s %s", primary_action, primary_entity);
-            } else if (variant == 1) {
+            } else if (pick == 1) {
                 snprintf(sentence, sizeof(sentence), "Sounds like you want to %s %s", primary_action, primary_entity);
-            } else {
+            } else if (pick == 2) {
                 snprintf(sentence, sizeof(sentence), "Okay, let's %s %s", primary_action, primary_entity);
+            } else {
+                snprintf(sentence, sizeof(sentence), "All right. We'll %s %s", primary_action, primary_entity);
             }
         } else if (primary_entity != NULL) {
-            if (variant == 2) {
+            if (pick == 2) {
                 if (analysis->is_question) {
                     snprintf(sentence, sizeof(sentence), "You're asking about %s", primary_entity);
                 } else {
                     snprintf(sentence, sizeof(sentence), "You're circling around %s", primary_entity);
                 }
+            } else if (pick == 3) {
+                snprintf(sentence, sizeof(sentence), "I hear %s in the mix", primary_entity);
             } else {
                 if (analysis->is_question) {
                     snprintf(sentence, sizeof(sentence), "Sounds like you're curious about %s", primary_entity);
@@ -786,18 +864,45 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
                 }
             }
         } else {
-            snprintf(sentence, sizeof(sentence), "I can help with that");
+            if (pick == 3) {
+                snprintf(sentence, sizeof(sentence), "I'm here to help");
+            } else {
+                snprintf(sentence, sizeof(sentence), "I can help with that");
+            }
         }
-        append_defaults(sentence, sizeof(sentence), ctx);
+        if (!language_only && !platform_only) {
+            const char *lang = ctx->language[0] ? ctx->language : NULL;
+            const char *plat = ctx->platform[0] ? ctx->platform : NULL;
+            const char *fw = ctx->framework[0] ? ctx->framework : NULL;
+
+            if (primary_entity != NULL) {
+                if (lang != NULL && strcmp(primary_entity, lang) == 0) {
+                    lang = NULL;
+                }
+                if (plat != NULL && strcmp(primary_entity, plat) == 0) {
+                    plat = NULL;
+                }
+                if (fw != NULL && strcmp(primary_entity, fw) == 0) {
+                    fw = NULL;
+                }
+            }
+            append_defaults_for(sentence, sizeof(sentence), lang, plat, fw);
+        }
         snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
         used = strlen(candidate);
 
-        if (gloss_short[0] != '\0' && primary_entity != NULL) {
+        if (!analysis->is_preference_question &&
+            gloss_short[0] != '\0' && primary_entity != NULL &&
+            analysis->domain_score > 0 && *out_prob >= 0.35) {
             if (variant == 1) {
                 snprintf(sentence, sizeof(sentence), "Quick meaning: %s means %s", primary_entity, gloss_short);
             } else {
                 snprintf(sentence, sizeof(sentence), "In plain terms, %s means %s", primary_entity, gloss_short);
             }
+            snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
+            used = strlen(candidate);
+        } else if (secondary_entity != NULL && analysis->domain_score > 0 && pick == 3) {
+            snprintf(sentence, sizeof(sentence), "Also heard %s", secondary_entity);
             snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
             used = strlen(candidate);
         } else if (hypernym != NULL) {
@@ -830,13 +935,20 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
             }
             snprintf(candidate + used, sizeof(candidate) - used, "%s? ", sentence);
         } else {
-            snprintf(sentence, sizeof(sentence), "What would you like to do next");
+            if (analysis->is_question) {
+                snprintf(sentence, sizeof(sentence), "I focus on software projects. What would you like to build");
+            } else {
+                snprintf(sentence, sizeof(sentence), "What would you like to do next");
+            }
             snprintf(candidate + used, sizeof(candidate) - used, "%s? ", sentence);
         }
 
         ok = apply_guardrails(candidate, sizeof(candidate));
         if (ok) {
             snprintf(out, out_size, "%s", candidate);
+            ctx->last_variant = pick;
+            snprintf(ctx->last_entity, sizeof(ctx->last_entity), "%s", primary_entity ? primary_entity : "");
+            snprintf(ctx->last_action, sizeof(ctx->last_action), "%s", primary_action ? primary_action : "");
             return;
         }
     }
@@ -1126,6 +1238,10 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
             if (is_noise_token(normalized)) {
                 continue;
             }
+            if (analysis->is_question &&
+                (strcmp(normalized, "like") == 0 || strcmp(normalized, "enjoy") == 0)) {
+                analysis->is_preference_question = 1;
+            }
 
             for (p = 0; p < 4; p++) {
                 int pos = pos_list[p];
@@ -1157,7 +1273,13 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
                         snprintf(synword, sizeof(synword), "%s", syn->words[w]);
                         normalize_word(synword);
                         if (!is_noise_token(synword)) {
-                            add_unique(analysis->entities, &analysis->entity_count, MAX_LIST, synword);
+                            if (pos == NOUN) {
+                                add_unique(analysis->entities, &analysis->entity_count, MAX_LIST, synword);
+                            } else if (pos == ADJ || pos == ADV) {
+                                add_unique(analysis->qualifiers, &analysis->qualifier_count, MAX_LIST, synword);
+                            } else if (pos == VERB) {
+                                add_unique(analysis->actions, &analysis->action_count, MAX_LIST, synword);
+                            }
                         }
                     }
                     fetch_related_terms(normalized, pos, syn, analysis, ctx);
@@ -1172,7 +1294,7 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
         }
     }
 
-    if (analysis->action_count > 1) {
+    if (analysis->action_count > 0) {
         int filtered = 0;
         for (i = 0; i < (size_t)analysis->action_count; i++) {
             if (!is_generic_verb(analysis->actions[i])) {
@@ -1180,9 +1302,7 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
                 filtered++;
             }
         }
-        if (filtered > 0) {
-            analysis->action_count = filtered;
-        }
+        analysis->action_count = filtered;
     }
 
     language_score = extract_language(analysis->entities, analysis->entity_count, language, sizeof(language));
@@ -1199,6 +1319,9 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
     capture_top_concepts(concepts, concept_count, "design",
                          analysis->design_focus, &analysis->design_focus_count, 3);
 
+    if (language_score > 0 || platform_score > 0 || framework_score > 0) {
+        analysis->domain_score += 1;
+    }
     if (analysis->sdlc_focus_count > 0 || analysis->design_focus_count > 0) {
         analysis->domain_score += 2;
     }
@@ -1206,7 +1329,8 @@ static void analyze_input(const char *input, struct chat_context *ctx, struct an
         const char *term = analysis->entities[i];
         if (strcmp(term, "code") == 0 || strcmp(term, "software") == 0 ||
             strcmp(term, "app") == 0 || strcmp(term, "application") == 0 ||
-            strcmp(term, "program") == 0 || strcmp(term, "cli") == 0 ||
+            strcmp(term, "program") == 0 || strcmp(term, "game") == 0 ||
+            strcmp(term, "cli") == 0 ||
             strcmp(term, "api") == 0 || strcmp(term, "server") == 0 ||
             strcmp(term, "service") == 0 || strcmp(term, "ui") == 0 ||
             strcmp(term, "gui") == 0 || strcmp(term, "database") == 0 ||
