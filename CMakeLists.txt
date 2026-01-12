@@ -27,6 +27,12 @@ include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include)
 add_subdirectory(lib)
 add_subdirectory(src)
 
+# Optional DIY AI demo tooling
+option(WORDNET_BUILD_DIY_AI "Build DIY AI demo tools" ON)
+if(WORDNET_BUILD_DIY_AI)
+    add_subdirectory(diy-ai)
+endif()
+
 # Linting helpers (clang-tidy and cppcheck) if available.
 find_program(CLANG_TIDY_EXE NAMES clang-tidy)
 find_program(CPPCHECK_EXE NAMES cppcheck)
