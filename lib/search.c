@@ -139,6 +139,7 @@ IndexPtr parse_index(long offset, int dbase, char *line) {
     
     IndexPtr idx = NULL;
     char *ptrtok;
+    char *tmpptr;
     int j;
 
     if ( !line )
@@ -200,7 +201,7 @@ IndexPtr parse_index(long offset, int dbase, char *line) {
     idx->tagged_cnt = atoi(ptrtok);
         
     /* make space for the offsets */
-    idx->offset = (long *) malloc(idx->off_cnt * (sizeof(long)));
+    idx->offset = (unsigned long *) malloc(idx->off_cnt * sizeof(*idx->offset));
     assert(idx->offset);
     
     /* get the offsets */
