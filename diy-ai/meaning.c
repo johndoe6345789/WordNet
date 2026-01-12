@@ -33,6 +33,24 @@ static int is_stopword(const char *word)
     return 0;
 }
 
+static void set_default_searchdir(void)
+{
+    const char *searchdir = getenv("WNSEARCHDIR");
+
+    if (searchdir != NULL && searchdir[0] != '\0') {
+        return;
+    }
+#ifdef _WIN32
+    {
+        char envbuf[512];
+        snprintf(envbuf, sizeof(envbuf), "WNSEARCHDIR=%s", DEFAULTPATH);
+        _putenv(envbuf);
+    }
+#else
+    setenv("WNSEARCHDIR", DEFAULTPATH, 1);
+#endif
+}
+
 static int is_noise_token(const char *word)
 {
     if (word == NULL || word[0] == '\0') {
@@ -289,8 +307,15 @@ int main(int argc, char **argv)
         }
     }
 
+    set_default_searchdir();
     if (wninit() != 0) {
-        fprintf(stderr, "WordNet data files not found. Set WNHOME if needed.\n");
+        const char *env_home = getenv("WNHOME");
+        const char *env_search = getenv("WNSEARCHDIR");
+
+        fprintf(stderr, "WordNet data files not found.\n");
+        fprintf(stderr, "DEFAULTPATH=%s\n", DEFAULTPATH);
+        fprintf(stderr, "WNHOME=%s\n", env_home ? env_home : "(unset)");
+        fprintf(stderr, "WNSEARCHDIR=%s\n", env_search ? env_search : "(unset)");
         return 1;
     }
 
