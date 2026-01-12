@@ -10,6 +10,8 @@
 #define MAX_CONCEPT_TERMS 256
 #define MAX_INPUT 1024
 #define MAX_CONCEPTS 16
+#define MAX_TERMS 1024
+#define MAX_GLOSS 512
 
 struct concept {
     const char *name;
@@ -19,6 +21,57 @@ struct concept {
     int term_count;
     int score;
 };
+
+struct chat_context {
+    char actions[MAX_LIST][MAX_TERM];
+    int action_count;
+    char entities[MAX_LIST][MAX_TERM];
+    int entity_count;
+    char qualifiers[MAX_LIST][MAX_TERM];
+    int qualifier_count;
+    char language[MAX_TERM];
+    char platform[MAX_TERM];
+    char framework[MAX_TERM];
+    struct {
+        char term[MAX_TERM];
+        int count;
+    } terms[MAX_TERMS];
+    int term_count;
+    int turns;
+};
+
+static int is_noise_token(const char *word);
+
+static const char *stopwords[] = {
+    "a", "an", "and", "are", "as", "at", "be", "but", "by",
+    "for", "from", "in", "is", "it", "of", "on", "or", "the",
+    "to", "was", "were", "with", "me", "my", "your", "our",
+    "should", "want", "need", "please", "make", "do", "write",
+    NULL
+};
+
+static const char *generic_verbs[] = {
+    "make", "do", "write", "build", "create", "implement",
+    "develop", "add", "use", "target", "support", "provide", NULL
+};
+
+static void set_default_searchdir(void)
+{
+    const char *searchdir = getenv("WNSEARCHDIR");
+
+    if (searchdir != NULL && searchdir[0] != '\0') {
+        return;
+    }
+#ifdef _WIN32
+    {
+        char envbuf[512];
+        snprintf(envbuf, sizeof(envbuf), "WNSEARCHDIR=%s", DEFAULTPATH);
+        _putenv(envbuf);
+    }
+#else
+    setenv("WNSEARCHDIR", DEFAULTPATH, 1);
+#endif
+}
 
 static int add_unique(char list[][MAX_TERM], int *count, const char *value)
 {
@@ -40,6 +93,59 @@ static int add_unique(char list[][MAX_TERM], int *count, const char *value)
     return 1;
 }
 
+static void add_term_count(struct chat_context *ctx, const char *term, int weight)
+{
+    int i;
+
+    if (term == NULL || term[0] == '\0') {
+        return;
+    }
+    for (i = 0; i < ctx->term_count; i++) {
+        if (strcmp(ctx->terms[i].term, term) == 0) {
+            ctx->terms[i].count += weight;
+            return;
+        }
+    }
+    if (ctx->term_count < MAX_TERMS) {
+        snprintf(ctx->terms[ctx->term_count].term, MAX_TERM, "%s", term);
+        ctx->terms[ctx->term_count].count = weight;
+        ctx->term_count++;
+    }
+}
+
+static void add_terms_from_text(struct chat_context *ctx, const char *text)
+{
+    char buf[MAX_GLOSS];
+    size_t i = 0;
+    size_t j = 0;
+
+    if (text == NULL) {
+        return;
+    }
+    snprintf(buf, sizeof(buf), "%s", text);
+
+    while (buf[i] != '\0') {
+        unsigned char c = (unsigned char)buf[i++];
+        if (isalnum(c)) {
+            if (j + 1 < sizeof(buf)) {
+                buf[j++] = (char)tolower(c);
+            }
+        } else if (j > 0) {
+            buf[j] = '\0';
+            if (!is_noise_token(buf)) {
+                add_term_count(ctx, buf, 1);
+            }
+            j = 0;
+        }
+    }
+    if (j > 0) {
+        buf[j] = '\0';
+        if (!is_noise_token(buf)) {
+            add_term_count(ctx, buf, 1);
+        }
+    }
+}
+
 static void normalize_word(char *word)
 {
     size_t i = 0;
@@ -54,6 +160,18 @@ static void normalize_word(char *word)
     word[j] = '\0';
 }
 
+static int is_stopword(const char *word)
+{
+    int i;
+
+    for (i = 0; stopwords[i] != NULL; i++) {
+        if (strcmp(word, stopwords[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int is_noise_token(const char *word)
 {
     size_t len;
@@ -63,6 +181,9 @@ static int is_noise_token(const char *word)
     }
     len = strlen(word);
     if (len < 3) {
+        return 1;
+    }
+    if (is_stopword(word)) {
         return 1;
     }
     return 0;
@@ -92,6 +213,27 @@ static void collect_from_synset(struct concept *concept, SynsetPtr syn)
     }
     for (i = 0; i < syn->wcount; i++) {
         add_concept_term(concept, syn->words[i]);
+    }
+}
+
+static void collect_memory_from_synset(struct chat_context *ctx, SynsetPtr syn)
+{
+    int i;
+
+    if (syn == NULL) {
+        return;
+    }
+    for (i = 0; i < syn->wcount; i++) {
+        char term[MAX_TERM];
+
+        snprintf(term, sizeof(term), "%s", syn->words[i]);
+        normalize_word(term);
+        if (!is_noise_token(term)) {
+            add_term_count(ctx, term, 2);
+        }
+    }
+    if (syn->defn != NULL) {
+        add_terms_from_text(ctx, syn->defn);
     }
 }
 
@@ -155,6 +297,18 @@ static void init_concepts(struct concept *concepts, int *concept_count)
         expand_seed_terms(&concepts[i]);
     }
     *concept_count = count;
+}
+
+static int is_generic_verb(const char *word)
+{
+    int i;
+
+    for (i = 0; generic_verbs[i] != NULL; i++) {
+        if (strcmp(word, generic_verbs[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int token_matches(const char *token, struct concept *concept)
@@ -248,7 +402,8 @@ static void extract_platform(char list[][MAX_TERM], int count, char *out, size_t
 {
     const char *platforms[] = {
         "cli", "command", "terminal", "web", "server", "service",
-        "api", "mobile", "desktop", "library", "script", NULL
+        "api", "mobile", "desktop", "library", "script", "gui",
+        "linux", "windows", "mac", "macos", NULL
     };
     int i;
 
@@ -261,7 +416,63 @@ static void extract_platform(char list[][MAX_TERM], int count, char *out, size_t
     }
 }
 
-static void analyze_input(const char *input)
+static void extract_framework(char list[][MAX_TERM], int count, char *out, size_t out_size)
+{
+    const char *frameworks[] = {
+        "sdl", "sdl2", "sdl3", "react", "vue", "django", "flask",
+        "express", "spring", "qt", "gtk", "tk", NULL
+    };
+    int i;
+
+    out[0] = '\0';
+    for (i = 0; frameworks[i] != NULL; i++) {
+        if (list_contains(list, count, frameworks[i])) {
+            snprintf(out, out_size, "%s", frameworks[i]);
+            return;
+        }
+    }
+}
+
+static void merge_context(struct chat_context *ctx,
+                          char actions[][MAX_TERM], int action_count,
+                          char entities[][MAX_TERM], int entity_count,
+                          char qualifiers[][MAX_TERM], int qualifier_count,
+                          const char *language,
+                          const char *platform,
+                          const char *framework)
+{
+    int i;
+
+    if (action_count > 0) {
+        ctx->action_count = 0;
+        for (i = 0; i < action_count; i++) {
+            add_unique(ctx->actions, &ctx->action_count, actions[i]);
+        }
+    }
+    if (entity_count > 0) {
+        ctx->entity_count = 0;
+        for (i = 0; i < entity_count; i++) {
+            add_unique(ctx->entities, &ctx->entity_count, entities[i]);
+        }
+    }
+    if (qualifier_count > 0) {
+        ctx->qualifier_count = 0;
+        for (i = 0; i < qualifier_count; i++) {
+            add_unique(ctx->qualifiers, &ctx->qualifier_count, qualifiers[i]);
+        }
+    }
+    if (language[0] != '\0') {
+        snprintf(ctx->language, sizeof(ctx->language), "%s", language);
+    }
+    if (platform[0] != '\0') {
+        snprintf(ctx->platform, sizeof(ctx->platform), "%s", platform);
+    }
+    if (framework[0] != '\0') {
+        snprintf(ctx->framework, sizeof(ctx->framework), "%s", framework);
+    }
+}
+
+static void analyze_input(const char *input, struct chat_context *ctx)
 {
     struct concept concepts[MAX_CONCEPTS];
     int concept_count = 0;
@@ -273,11 +484,13 @@ static void analyze_input(const char *input)
     int qualifier_count = 0;
     char language[MAX_TERM];
     char platform[MAX_TERM];
+    char framework[MAX_TERM];
     char token[MAX_TERM];
     size_t i;
     size_t j = 0;
 
     init_concepts(concepts, &concept_count);
+    ctx->turns++;
 
     for (i = 0; i <= strlen(input); i++) {
         unsigned char c = (unsigned char)input[i];
@@ -329,6 +542,7 @@ static void analyze_input(const char *input)
                         normalize_word(synword);
                         add_unique(entities, &entity_count, synword);
                     }
+                    collect_memory_from_synset(ctx, syn);
                     free_synset(syn);
                 }
                 free_index(idx);
@@ -336,45 +550,61 @@ static void analyze_input(const char *input)
         }
     }
 
+    if (action_count > 1) {
+        int filtered = 0;
+        for (i = 0; i < (size_t)action_count; i++) {
+            if (!is_generic_verb(actions[i])) {
+                snprintf(actions[filtered], MAX_TERM, "%s", actions[i]);
+                filtered++;
+            }
+        }
+        if (filtered > 0) {
+            action_count = filtered;
+        }
+    }
+
     extract_language(entities, entity_count, language, sizeof(language));
     extract_platform(entities, entity_count, platform, sizeof(platform));
+    extract_framework(entities, entity_count, framework, sizeof(framework));
     rank_concepts(concepts, concept_count, entities, entity_count);
+    merge_context(ctx, actions, action_count, entities, entity_count,
+                  qualifiers, qualifier_count, language, platform, framework);
 
     printf("\nIntent sketch\n");
     printf("- actions: ");
-    if (action_count == 0) {
+    if (ctx->action_count == 0) {
         printf("(none)\n");
     } else {
         int i;
-        for (i = 0; i < action_count && i < 6; i++) {
+        for (i = 0; i < ctx->action_count && i < 6; i++) {
             if (i > 0) {
                 printf(", ");
             }
-            printf("%s", actions[i]);
+            printf("%s", ctx->actions[i]);
         }
         printf("\n");
     }
     printf("- entities: ");
-    if (entity_count == 0) {
+    if (ctx->entity_count == 0) {
         printf("(none)\n");
     } else {
         int i;
-        for (i = 0; i < entity_count && i < 6; i++) {
+        for (i = 0; i < ctx->entity_count && i < 6; i++) {
             if (i > 0) {
                 printf(", ");
             }
-            printf("%s", entities[i]);
+            printf("%s", ctx->entities[i]);
         }
         printf("\n");
     }
-    if (qualifier_count > 0) {
+    if (ctx->qualifier_count > 0) {
         int i;
         printf("- qualifiers: ");
-        for (i = 0; i < qualifier_count && i < 6; i++) {
+        for (i = 0; i < ctx->qualifier_count && i < 6; i++) {
             if (i > 0) {
                 printf(", ");
             }
-            printf("%s", qualifiers[i]);
+            printf("%s", ctx->qualifiers[i]);
         }
         printf("\n");
     }
@@ -385,22 +615,77 @@ static void analyze_input(const char *input)
     print_top_concepts(concepts, concept_count, "design", 3);
 
     printf("\nLikely defaults\n");
-    printf("- language: %s\n", language[0] ? language : "(unspecified)");
-    printf("- platform: %s\n", platform[0] ? platform : "(unspecified)");
+    printf("- language: %s\n", ctx->language[0] ? ctx->language : "(unspecified)");
+    printf("- platform: %s\n", ctx->platform[0] ? ctx->platform : "(unspecified)");
+    printf("- framework: %s\n", ctx->framework[0] ? ctx->framework : "(unspecified)");
 
     printf("\nQuestions\n");
-    if (action_count == 0) {
+    if (ctx->action_count == 0) {
         printf("- What should the system do?\n");
     }
-    if (entity_count == 0) {
+    if (ctx->entity_count == 0) {
         printf("- What should it operate on?\n");
     }
-    if (language[0] == '\0') {
+    if (ctx->language[0] == '\0') {
         printf("- Which language or runtime should I target?\n");
     }
-    if (platform[0] == '\0') {
+    if (ctx->platform[0] == '\0') {
         printf("- Should this be a CLI, service, library, or UI?\n");
     }
+}
+
+static int compare_terms(const void *a, const void *b)
+{
+    const int *ia = (const int *)a;
+    const int *ib = (const int *)b;
+
+    if (*ia != *ib) {
+        return (*ib - *ia);
+    }
+    return 0;
+}
+
+static void print_summary(struct chat_context *ctx)
+{
+    int i;
+    int top = 12;
+    int indices[MAX_TERMS];
+    int count = ctx->term_count;
+
+    if (count == 0) {
+        printf("No memory yet.\n");
+        return;
+    }
+
+    for (i = 0; i < count; i++) {
+        indices[i] = i;
+    }
+    for (i = 0; i < count - 1; i++) {
+        int j;
+        for (j = i + 1; j < count; j++) {
+            if (ctx->terms[indices[j]].count > ctx->terms[indices[i]].count) {
+                int tmp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = tmp;
+            }
+        }
+    }
+
+    printf("Memory summary (avg per turn)\n");
+    for (i = 0; i < count && i < top; i++) {
+        int idx = indices[i];
+        double avg = 0.0;
+
+        if (ctx->turns > 0) {
+            avg = (double)ctx->terms[idx].count / (double)ctx->turns;
+        }
+        printf("- %s: %.2f\n", ctx->terms[idx].term, avg);
+    }
+}
+
+static void reset_context(struct chat_context *ctx)
+{
+    memset(ctx, 0, sizeof(*ctx));
 }
 
 static void print_help(const char *prog)
@@ -411,6 +696,8 @@ static void print_help(const char *prog)
     printf("commands:\n");
     printf("  /help        Show this help\n");
     printf("  /exit        Exit the chat\n");
+    printf("  /summary     Show averaged memory summary\n");
+    printf("  /reset       Clear memory and context\n");
     printf("\n");
     printf("examples:\n");
     printf("  build a CLI that parses log files\n");
@@ -420,7 +707,10 @@ static void print_help(const char *prog)
 int main(void)
 {
     char input[MAX_INPUT];
+    struct chat_context ctx;
 
+    memset(&ctx, 0, sizeof(ctx));
+    set_default_searchdir();
     if (wninit() != 0) {
         fprintf(stderr, "WordNet data files not found. Set WNHOME or WNSEARCHDIR.\n");
         return 1;
@@ -444,7 +734,16 @@ int main(void)
         if (strcmp(input, "/exit") == 0 || strcmp(input, "/quit") == 0) {
             break;
         }
-        analyze_input(input);
+        if (strcmp(input, "/summary") == 0) {
+            print_summary(&ctx);
+            continue;
+        }
+        if (strcmp(input, "/reset") == 0) {
+            reset_context(&ctx);
+            printf("Memory reset.\n");
+            continue;
+        }
+        analyze_input(input, &ctx);
     }
     return 0;
 }

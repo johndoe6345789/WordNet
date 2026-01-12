@@ -175,6 +175,19 @@ wn-meaning/fast:
 .PHONY : wn-meaning/fast
 
 #=============================================================================
+# Target rules for targets named wn-chat
+
+# Build rule for target.
+wn-chat: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 wn-chat
+.PHONY : wn-chat
+
+# fast build rule for target.
+wn-chat/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/build
+.PHONY : wn-chat/fast
+
+#=============================================================================
 # Target rules for targets named WN
 
 # Build rule for target.
@@ -186,6 +199,30 @@ WN: cmake_check_build_system
 WN/fast:
 	$(MAKE) $(MAKESILENT) -f lib/CMakeFiles/WN.dir/build.make lib/CMakeFiles/WN.dir/build
 .PHONY : WN/fast
+
+chat.o: chat.c.o
+.PHONY : chat.o
+
+# target to build an object file
+chat.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/chat.c.o
+.PHONY : chat.c.o
+
+chat.i: chat.c.i
+.PHONY : chat.i
+
+# target to preprocess a source file
+chat.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/chat.c.i
+.PHONY : chat.c.i
+
+chat.s: chat.c.s
+.PHONY : chat.s
+
+# target to generate assembly for a file
+chat.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/wn-chat.dir/build.make CMakeFiles/wn-chat.dir/chat.c.s
+.PHONY : chat.c.s
 
 meaning.o: meaning.c.o
 .PHONY : meaning.o
@@ -224,7 +261,11 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... WN"
+	@echo "... wn-chat"
 	@echo "... wn-meaning"
+	@echo "... chat.o"
+	@echo "... chat.i"
+	@echo "... chat.s"
 	@echo "... meaning.o"
 	@echo "... meaning.i"
 	@echo "... meaning.s"
