@@ -5,6 +5,8 @@
 
 #include <wn.h>
 
+#include "json_extract.h"
+
 #define MAX_TERM 64
 #define MAX_LIST 128
 #define MAX_CONCEPT_TERMS 256
@@ -719,14 +721,22 @@ static const char *persona_prefix(int turn, int variant)
 {
     if (turn == 1) {
         if ((turn + variant) % 3 == 0) {
-            return "Hey, I'm WN-Guide.";
+            const char *val = get_chat_string("persona_hey");
+            return val ? val : "Hey, I'm WN-Guide.";
         }
         if ((turn + variant) % 3 == 1) {
-            return "Alright, I'm WN-Guide.";
+            const char *val = get_chat_string("persona_alright");
+            return val ? val : "Alright, I'm WN-Guide.";
         }
-        return "Hi, I'm WN-Guide.";
+        {
+            const char *val = get_chat_string("persona_hi");
+            return val ? val : "Hi, I'm WN-Guide.";
+        }
     }
-    return "";
+    {
+        const char *val = get_chat_string("persona_empty");
+        return val ? val : "";
+    }
 }
 
 static void synthesize_response(struct chat_context *ctx, struct analysis_result *analysis,
@@ -759,9 +769,19 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
     if (analysis->has_greeting) {
         const char *prefix = persona_prefix(ctx->turns, 0);
         if (prefix[0] != '\0') {
-            snprintf(out, out_size, "%s Great to see you. What are you working on?", prefix);
+            const char *val = get_chat_string("greet_with_persona");
+            if (val != NULL) {
+                snprintf(out, out_size, "%s %s", prefix, val);
+            } else {
+                snprintf(out, out_size, "%s Great to see you. What are you working on?", prefix);
+            }
         } else {
-            snprintf(out, out_size, "Great to see you. What are you working on?");
+            const char *val = get_chat_string("greet_plain");
+            if (val != NULL) {
+                snprintf(out, out_size, "%s", val);
+            } else {
+                snprintf(out, out_size, "Great to see you. What are you working on?");
+            }
         }
         apply_guardrails(out, out_size);
         return;
@@ -832,42 +852,112 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
         }
 
         if (analysis->is_preference_question && primary_entity != NULL) {
-            snprintf(sentence, sizeof(sentence), "I don't have preferences, but I can help with %s", primary_entity);
+            const char *val = get_chat_string("pref_answer");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+            } else {
+                snprintf(sentence, sizeof(sentence), "I don't have preferences, but I can help with %s", primary_entity);
+            }
         } else if (language_only) {
-            snprintf(sentence, sizeof(sentence), "Got it. We'll use %s", ctx->language);
+            const char *val = get_chat_string("set_language");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, ctx->language);
+            } else {
+                snprintf(sentence, sizeof(sentence), "Got it. We'll use %s", ctx->language);
+            }
         } else if (platform_only) {
-            snprintf(sentence, sizeof(sentence), "Got it. We'll target %s", ctx->platform);
+            const char *val = get_chat_string("set_platform");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, ctx->platform);
+            } else {
+                snprintf(sentence, sizeof(sentence), "Got it. We'll target %s", ctx->platform);
+            }
         } else if (primary_action != NULL && primary_entity != NULL) {
             if (pick == 0) {
-                snprintf(sentence, sizeof(sentence), "Got it. You want to %s %s", primary_action, primary_entity);
+                const char *val = get_chat_string("action_got_it");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_action, primary_entity);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "Got it. You want to %s %s", primary_action, primary_entity);
+                }
             } else if (pick == 1) {
-                snprintf(sentence, sizeof(sentence), "Sounds like you want to %s %s", primary_action, primary_entity);
+                const char *val = get_chat_string("action_sounds_like");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_action, primary_entity);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "Sounds like you want to %s %s", primary_action, primary_entity);
+                }
             } else if (pick == 2) {
-                snprintf(sentence, sizeof(sentence), "Okay, let's %s %s", primary_action, primary_entity);
+                const char *val = get_chat_string("action_okay");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_action, primary_entity);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "Okay, let's %s %s", primary_action, primary_entity);
+                }
             } else {
-                snprintf(sentence, sizeof(sentence), "All right. We'll %s %s", primary_action, primary_entity);
+                const char *val = get_chat_string("action_all_right");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_action, primary_entity);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "All right. We'll %s %s", primary_action, primary_entity);
+                }
             }
         } else if (primary_entity != NULL) {
             if (pick == 2) {
                 if (analysis->is_question) {
-                    snprintf(sentence, sizeof(sentence), "You're asking about %s", primary_entity);
+                    const char *val = get_chat_string("focus_asking");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "You're asking about %s", primary_entity);
+                    }
                 } else {
-                    snprintf(sentence, sizeof(sentence), "You're circling around %s", primary_entity);
+                    const char *val = get_chat_string("focus_circling");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "You're circling around %s", primary_entity);
+                    }
                 }
             } else if (pick == 3) {
-                snprintf(sentence, sizeof(sentence), "I hear %s in the mix", primary_entity);
+                const char *val = get_chat_string("focus_mix");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "I hear %s in the mix", primary_entity);
+                }
             } else {
                 if (analysis->is_question) {
-                    snprintf(sentence, sizeof(sentence), "Sounds like you're curious about %s", primary_entity);
+                    const char *val = get_chat_string("focus_curious");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "Sounds like you're curious about %s", primary_entity);
+                    }
                 } else {
-                    snprintf(sentence, sizeof(sentence), "I'm picking up a focus on %s", primary_entity);
+                    const char *val = get_chat_string("focus_picking");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s %s", val, primary_entity);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "I'm picking up a focus on %s", primary_entity);
+                    }
                 }
             }
         } else {
             if (pick == 3) {
-                snprintf(sentence, sizeof(sentence), "I'm here to help");
+                const char *val = get_chat_string("fallback_help_alt");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s", val);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "I'm here to help");
+                }
             } else {
-                snprintf(sentence, sizeof(sentence), "I can help with that");
+                const char *val = get_chat_string("fallback_help");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s", val);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "I can help with that");
+                }
             }
         }
         if (!language_only && !platform_only) {
@@ -895,22 +985,47 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
             gloss_short[0] != '\0' && primary_entity != NULL &&
             analysis->domain_score > 0 && *out_prob >= 0.35) {
             if (variant == 1) {
-                snprintf(sentence, sizeof(sentence), "Quick meaning: %s means %s", primary_entity, gloss_short);
+                const char *val = get_chat_string("gloss_quick");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_entity, gloss_short);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "Quick meaning: %s means %s", primary_entity, gloss_short);
+                }
             } else {
-                snprintf(sentence, sizeof(sentence), "In plain terms, %s means %s", primary_entity, gloss_short);
+                const char *val = get_chat_string("gloss_plain");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s %s %s", val, primary_entity, gloss_short);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "In plain terms, %s means %s", primary_entity, gloss_short);
+                }
             }
             snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
             used = strlen(candidate);
         } else if (secondary_entity != NULL && analysis->domain_score > 0 && pick == 3) {
-            snprintf(sentence, sizeof(sentence), "Also heard %s", secondary_entity);
+            const char *val = get_chat_string("gloss_secondary");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, secondary_entity);
+            } else {
+                snprintf(sentence, sizeof(sentence), "Also heard %s", secondary_entity);
+            }
             snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
             used = strlen(candidate);
         } else if (hypernym != NULL) {
-            snprintf(sentence, sizeof(sentence), "That sounds like a kind of %s", hypernym);
+            const char *val = get_chat_string("gloss_hypernym");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, hypernym);
+            } else {
+                snprintf(sentence, sizeof(sentence), "That sounds like a kind of %s", hypernym);
+            }
             snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
             used = strlen(candidate);
         } else if (synonym != NULL && strcmp(synonym, primary_entity) != 0) {
-            snprintf(sentence, sizeof(sentence), "You might also mean %s", synonym);
+            const char *val = get_chat_string("gloss_synonym");
+            if (val != NULL) {
+                snprintf(sentence, sizeof(sentence), "%s %s", val, synonym);
+            } else {
+                snprintf(sentence, sizeof(sentence), "You might also mean %s", synonym);
+            }
             snprintf(candidate + used, sizeof(candidate) - used, "%s. ", sentence);
             used = strlen(candidate);
         }
@@ -924,21 +1039,51 @@ static void synthesize_response(struct chat_context *ctx, struct analysis_result
         if (analysis->domain_score > 0) {
             if (ctx->language[0] == '\0' || ctx->platform[0] == '\0') {
                 if (ctx->language[0] == '\0' && ctx->platform[0] == '\0') {
-                    snprintf(sentence, sizeof(sentence), "Any preference for language or platform");
+                    const char *val = get_chat_string("ask_language_platform");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s", val);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "Any preference for language or platform");
+                    }
                 } else if (ctx->language[0] == '\0') {
-                    snprintf(sentence, sizeof(sentence), "Which language should I use");
+                    const char *val = get_chat_string("ask_language");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s", val);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "Which language should I use");
+                    }
                 } else {
-                    snprintf(sentence, sizeof(sentence), "Should this be a CLI, service, library, or UI");
+                    const char *val = get_chat_string("ask_platform");
+                    if (val != NULL) {
+                        snprintf(sentence, sizeof(sentence), "%s", val);
+                    } else {
+                        snprintf(sentence, sizeof(sentence), "Should this be a CLI, service, library, or UI");
+                    }
                 }
             } else {
-                snprintf(sentence, sizeof(sentence), "Want me to draft a quick plan or jump into an example");
+                const char *val = get_chat_string("ask_plan_or_example");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s", val);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "Want me to draft a quick plan or jump into an example");
+                }
             }
             snprintf(candidate + used, sizeof(candidate) - used, "%s? ", sentence);
         } else {
             if (analysis->is_question) {
-                snprintf(sentence, sizeof(sentence), "I focus on software projects. What would you like to build");
+                const char *val = get_chat_string("ask_software_focus");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s", val);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "I focus on software projects. What would you like to build");
+                }
             } else {
-                snprintf(sentence, sizeof(sentence), "What would you like to do next");
+                const char *val = get_chat_string("ask_next");
+                if (val != NULL) {
+                    snprintf(sentence, sizeof(sentence), "%s", val);
+                } else {
+                    snprintf(sentence, sizeof(sentence), "What would you like to do next");
+                }
             }
             snprintf(candidate + used, sizeof(candidate) - used, "%s? ", sentence);
         }
@@ -1651,6 +1796,7 @@ static void print_json_context(struct chat_context *ctx)
 int main(int argc, char **argv)
 {
     char input[MAX_INPUT];
+    char extracted[MAX_INPUT];
     struct chat_context ctx;
     struct analysis_result analysis;
     int quiet = 0;
@@ -1660,6 +1806,10 @@ int main(int argc, char **argv)
     if (wninit() != 0) {
         fprintf(stderr, "WordNet data files not found. Set WNHOME or WNSEARCHDIR.\n");
         return 1;
+    }
+
+    if (!load_chat_strings("chat_strings.json")) {
+        load_chat_strings("diy-ai/chat_strings.json");
     }
 
     if (argc > 1 && strcmp(argv[1], "--quiet") == 0) {
@@ -1700,6 +1850,13 @@ int main(int argc, char **argv)
             reset_context(&ctx);
             printf("Memory reset.\n");
             continue;
+        }
+        if (input[0] == '{' || input[0] == '[') {
+            if (extract_strings_from_json(input, extracted, sizeof(extracted))) {
+                if (extracted[0] != '\0') {
+                    snprintf(input, sizeof(input), "%s", extracted);
+                }
+            }
         }
         analyze_input(input, &ctx, &analysis);
         if (!quiet) {

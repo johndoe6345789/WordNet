@@ -56,5 +56,6 @@ Inside the chat:
 ```
 build a CLI that parses log files
 add retries and backoff for failed requests
+{"prompt":"build a CLI that parses log files","language":"python"}
 /exit
 ```
