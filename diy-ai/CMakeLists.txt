@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 get_filename_component(WORDNET_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
 if(NOT DEFINED DEFAULTPATH)
-    set(DEFAULTPATH "/usr/local/WordNet-3.0/dict" CACHE STRING "Default path for WordNet data files")
+    set(DEFAULTPATH "${WORDNET_ROOT}/dict" CACHE STRING "Default path for WordNet data files")
 endif()
 add_compile_definitions(DEFAULTPATH="${DEFAULTPATH}")
 
