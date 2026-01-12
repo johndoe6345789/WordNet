@@ -47,6 +47,9 @@ WNHOME=/path/to/WordNet-3.0 ./build/diy-ai/wn-meaning "river of time"
 ./build/diy-ai/wn-chat
 ```
 
+The chat uses WordNet to expand terms with synonyms/hypernyms, ranks concepts,
+and returns a short sentence response with a simple confidence score.
+
 Inside the chat:
 
 ```

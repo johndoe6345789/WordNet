@@ -397,6 +397,73 @@ static int related_match_score(struct analysis_result *analysis, const char *ter
     return 0;
 }
 
+static double score_entity(struct chat_context *ctx, struct analysis_result *analysis, const char *term)
+{
+    int freq = term_frequency(ctx, term);
+    int rel = related_match_score(analysis, term);
+    double score = 1.0;
+
+    if (freq > 0) {
+        score += (double)freq * 0.5;
+    }
+    if (rel > 0) {
+        score += (double)rel * 0.75;
+    }
+    return score;
+}
+
+static const char *top_scored_entity(struct chat_context *ctx,
+                                     struct analysis_result *analysis,
+                                     double *out_prob)
+{
+    int i;
+    double best = 0.0;
+    double total = 0.0;
+    const char *best_term = NULL;
+
+    for (i = 0; i < analysis->entity_count; i++) {
+        double score = score_entity(ctx, analysis, analysis->entities[i]);
+        total += score;
+        if (score > best) {
+            best = score;
+            best_term = analysis->entities[i];
+        }
+    }
+    if (out_prob != NULL) {
+        if (total > 0.0 && best_term != NULL) {
+            *out_prob = best / total;
+        } else {
+            *out_prob = 0.0;
+        }
+    }
+    return best_term;
+}
+
+static const char *top_action(struct analysis_result *analysis)
+{
+    if (analysis->action_count > 0) {
+        return analysis->actions[0];
+    }
+    return NULL;
+}
+
+static void append_defaults(char *buf, size_t buf_size, struct chat_context *ctx)
+{
+    size_t used = strlen(buf);
+
+    if (ctx->language[0]) {
+        snprintf(buf + used, buf_size - used, " in %s", ctx->language);
+        used = strlen(buf);
+    }
+    if (ctx->platform[0]) {
+        snprintf(buf + used, buf_size - used, " on %s", ctx->platform);
+        used = strlen(buf);
+    }
+    if (ctx->framework[0]) {
+        snprintf(buf + used, buf_size - used, " with %s", ctx->framework);
+    }
+}
+
 static void rank_concepts(struct concept *concepts, int concept_count,
                           char list[][MAX_TERM], int list_count,
                           struct chat_context *ctx,
@@ -921,6 +988,11 @@ static void print_related_terms(struct analysis_result *analysis)
 
 static void generate_response(struct chat_context *ctx, struct analysis_result *analysis)
 {
+    double top_prob = 0.0;
+    const char *primary_entity = top_scored_entity(ctx, analysis, &top_prob);
+    const char *primary_action = top_action(analysis);
+    char reply[256];
+
     printf("\nResponse\n");
 
     if (analysis->action_count > 0 || analysis->entity_count > 0) {
@@ -985,6 +1057,26 @@ static void generate_response(struct chat_context *ctx, struct analysis_result *
     if (analysis->related_count > 0) {
         printf("- wordnet context:\n");
         print_related_terms(analysis);
+    }
+
+    reply[0] = '\0';
+    if (primary_action != NULL && primary_entity != NULL) {
+        if ((ctx->turns % 3) == 1) {
+            snprintf(reply, sizeof(reply), "My best guess is you want to %s %s", primary_action, primary_entity);
+        } else if ((ctx->turns % 3) == 2) {
+            snprintf(reply, sizeof(reply), "It sounds like the core task is to %s %s", primary_action, primary_entity);
+        } else {
+            snprintf(reply, sizeof(reply), "I can help you %s %s", primary_action, primary_entity);
+        }
+    } else if (primary_entity != NULL) {
+        snprintf(reply, sizeof(reply), "I see a focus on %s", primary_entity);
+    }
+    if (reply[0] != '\0') {
+        append_defaults(reply, sizeof(reply), ctx);
+        printf("- reply: %s.\n", reply);
+        if (top_prob > 0.0) {
+            printf("  confidence: %.2f\n", top_prob);
+        }
     }
 
     if (ctx->language[0] == '\0' || ctx->platform[0] == '\0') {
