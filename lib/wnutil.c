@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -35,6 +36,30 @@ static char msgbuf[256];	/* buffer for constructing error messages */
 static char *strstr_word;
 static char *strstr_stringstart;
 static char *strstr_stringcurrent;
+
+static void append_str(char *buf, size_t size, const char *src)
+{
+    size_t len = strlen(buf);
+
+    if (len + 1 >= size) {
+	return;
+    }
+    strncat(buf, src, size - len - 1);
+}
+
+static void append_fmt(char *buf, size_t size, const char *fmt, ...)
+{
+    size_t len = strlen(buf);
+    va_list args;
+
+    if (len + 1 >= size) {
+	return;
+    }
+
+    va_start(args, fmt);
+    vsnprintf(buf + len, size - len, fmt, args);
+    va_end(args);
+}
 
 
 /* Initialization functions */
@@ -141,23 +166,33 @@ static int do_init(void)
 	RegQueryValueEx(hkey, TEXT("WNHome"),
 			NULL, &dwType, searchdir, &dwSize);
 	RegCloseKey(hkey);
-	strcat(searchdir, DICTDIR);
+	{
+	    size_t len = strlen(searchdir);
+	    if (len + 1 < sizeof(searchdir)) {
+		strncat(searchdir, DICTDIR, sizeof(searchdir) - len - 1);
+	    }
+	}
     } else if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\WordNet\\3.0"),
 		     0, KEY_READ, &hkey) == ERROR_SUCCESS) {
 	dwSize = sizeof(searchdir);
 	RegQueryValueEx(hkey, TEXT("WNHome"),
 			NULL, &dwType, searchdir, &dwSize);
 	RegCloseKey(hkey);
-	strcat(searchdir, DICTDIR);
+	{
+	    size_t len = strlen(searchdir);
+	    if (len + 1 < sizeof(searchdir)) {
+		strncat(searchdir, DICTDIR, sizeof(searchdir) - len - 1);
+	    }
+	}
     } else
-	sprintf(searchdir, DEFAULTPATH);
+	snprintf(searchdir, sizeof(searchdir), "%s", DEFAULTPATH);
 #else
     if ((env = getenv("WNSEARCHDIR")) != NULL)
-	strcpy(searchdir, env);
+	snprintf(searchdir, sizeof(searchdir), "%s", env);
     else if ((env = getenv("WNHOME")) != NULL)
-	sprintf(searchdir, "%s%s", env, DICTDIR);
+	snprintf(searchdir, sizeof(searchdir), "%s%s", env, DICTDIR);
     else
-	strcpy(searchdir, DEFAULTPATH);
+	snprintf(searchdir, sizeof(searchdir), "%s", DEFAULTPATH);
 #endif
 
     for (i = 1; i < NUMPARTS + 1; i++) {
@@ -369,10 +404,11 @@ char *GetWNStr(char *searchstr, int dbase)
     if (!(underscore = strchr(searchstr, '_')) &&
 	!(hyphen = strchr(searchstr, '-')) &&
 	!(period = strchr(searchstr, '.')))
-	return (strcpy(strings[0],searchstr));
+	snprintf(strings[0], sizeof(strings[0]), "%s", searchstr);
+	return(strings[0]);
 
     for(i = 0; i < 3; i++)
-	strcpy(strings[i], searchstr);
+	snprintf(strings[i], sizeof(strings[i]), "%s", searchstr);
     if (underscore != NULL) strsubst(strings[1], '_', '-');
     if (hyphen != NULL) strsubst(strings[2], '-', '_');
     for(i = j = k = 0; (c = searchstr[i]) != '\0'; i++){
@@ -484,18 +520,18 @@ char *FmtSynset(SynsetPtr synptr, int defn)
     synset[0] = '\0';
 
     if (fileinfoflag)
-	sprintf(synset, "<%s> ", lexfiles[synptr->fnum]);
+	append_fmt(synset, sizeof(synset), "<%s> ", lexfiles[synptr->fnum]);
 
-    strcat(synset, "{ ");
+    append_str(synset, sizeof(synset), "{ ");
     for (i = 0; i < (synptr->wcount - 1); i++)
-	sprintf(synset + strlen(synset), "%s, ", synptr->words[i]);
+	append_fmt(synset, sizeof(synset), "%s, ", synptr->words[i]);
 
-    strcat(synset, synptr->words[i]);
+    append_str(synset, sizeof(synset), synptr->words[i]);
 
     if (defn && synptr->defn)
-	sprintf(synset + strlen(synset), " (%s) ", synptr->defn);
+	append_fmt(synset, sizeof(synset), " (%s) ", synptr->defn);
 
-    strcat(synset, " }");
+    append_str(synset, sizeof(synset), " }");
     return(synset);
 }
 
@@ -515,7 +551,10 @@ char *WNSnsToStr(IndexPtr idx, int sense)
 		adjss = read_synset(sptr->ppos[j],sptr->ptroff[j],"");
 		sptr->headword = malloc (strlen(adjss->words[0]) + 1);
 		assert(sptr->headword);
-		strcpy(sptr->headword, adjss->words[0]);
+		snprintf(sptr->headword,
+			 strlen(adjss->words[0]) + 1,
+			 "%s",
+			 adjss->words[0]);
 		strtolower(sptr->headword);
 		sptr->headsense = adjss->lexid[0];
 		free_synset(adjss); 
@@ -525,7 +564,7 @@ char *WNSnsToStr(IndexPtr idx, int sense)
     }
 
     for (j = 0; j < sptr->wcount; j++) {
-	strcpy(lowerword, sptr->words[j]);
+	snprintf(lowerword, sizeof(lowerword), "%s", sptr->words[j]);
 	strtolower(lowerword);
 	if(!strcmp(lowerword, idx->wd))
 	    break;
@@ -593,14 +632,14 @@ SnsIndexPtr GetSenseIndex(char *sensekey)
     if ((line = bin_search(sensekey, sensefp)) != NULL) {
 	snsidx = (SnsIndexPtr)malloc(sizeof(SnsIndex));
 	assert(snsidx);
-	sscanf(line, "%s %s %d %d\n",
+	sscanf(line, "%255s %8s %d %d\n",
 	       buf,
 	       loc,
 	       &snsidx->wnsense,
 	       &snsidx->tag_cnt);
 	snsidx->sensekey = malloc(strlen(buf) + 1);
 	assert(snsidx->sensekey);
-	strcpy(snsidx->sensekey, buf);
+	snprintf(snsidx->sensekey, strlen(buf) + 1, "%s", buf);
 	snsidx->loc = atol(loc);
 	/* Parse out word from sensekey to make things easier for caller */
 	snsidx->word = strdup(GetWORD(snsidx->sensekey));
@@ -622,7 +661,7 @@ int GetTagcnt(IndexPtr idx, int sense)
       
 	sensekey = WNSnsToStr(idx, sense);
 	if ((line = bin_search(sensekey, cntlistfp)) != NULL) {
-	    sscanf(line, "%s %d %d", buf, &snum, &cnt);
+	    sscanf(line, "%255s %d %d", buf, &snum, &cnt);
 	}
 	free(sensekey);
     }
@@ -649,8 +688,8 @@ char *GetOffsetForKey(unsigned int key)
     /* Try to open file in case wn_init wasn't called */
 
     if (!keyindexfp) {
-	strcpy(searchdir, SetSearchdir());
-	sprintf(tmpbuf, KEYIDXFILE, searchdir);
+	snprintf(searchdir, sizeof(searchdir), "%s", SetSearchdir());
+	snprintf(tmpbuf, sizeof(tmpbuf), KEYIDXFILE, searchdir);
 	keyindexfp = fopen(tmpbuf, "r");
     }
     if (keyindexfp) {
@@ -674,8 +713,8 @@ unsigned int GetKeyForOffset(char *loc)
     /* Try to open file in case wn_init wasn't called */
 
     if (!revkeyindexfp) {
-	strcpy(searchdir, SetSearchdir());
-	sprintf(tmpbuf, REVKEYIDXFILE, searchdir);
+	snprintf(searchdir, sizeof(searchdir), "%s", SetSearchdir());
+	snprintf(tmpbuf, sizeof(tmpbuf), REVKEYIDXFILE, searchdir);
 	revkeyindexfp = fopen(tmpbuf, "r");
     }
     if (revkeyindexfp) {
@@ -696,11 +735,11 @@ char *SetSearchdir()
        If not set, check for WNHOME/dict, otherwise use DEFAULTPATH. */
 
     if ((env = getenv("WNSEARCHDIR")) != NULL)
-	strcpy(searchdir, env);
+	snprintf(searchdir, sizeof(searchdir), "%s", env);
     else if ((env = getenv("WNHOME")) != NULL)
-	sprintf(searchdir, "%s%s", env, DICTDIR);
+	snprintf(searchdir, sizeof(searchdir), "%s%s", env, DICTDIR);
     else
-	strcpy(searchdir, DEFAULTPATH);
+	snprintf(searchdir, sizeof(searchdir), "%s", DEFAULTPATH);
 
     return(searchdir);
 }

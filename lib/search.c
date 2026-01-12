@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #include "wn.h"
 
@@ -79,6 +80,30 @@ static int adj_marker;
 
 extern long last_bin_search_offset;
 
+static void append_str(char *buf, size_t size, const char *src)
+{
+    size_t len = strlen(buf);
+
+    if (len + 1 >= size) {
+	return;
+    }
+    strncat(buf, src, size - len - 1);
+}
+
+static void append_fmt(char *buf, size_t size, const char *fmt, ...)
+{
+    size_t len = strlen(buf);
+    va_list args;
+
+    if (len + 1 >= size) {
+	return;
+    }
+
+    va_start(args, fmt);
+    vsnprintf(buf + len, size - len, fmt, args);
+    va_end(args);
+}
+
 
 /* Find word in index file and return parsed entry in data structure.
    Input word must be exact match of string in database. */
@@ -139,13 +164,13 @@ IndexPtr parse_index(long offset, int dbase, char *line) {
     
     idx->wd = malloc(strlen(ptrtok) + 1);
     assert(idx->wd);
-    strcpy(idx->wd, ptrtok);
+    snprintf(idx->wd, strlen(ptrtok) + 1, "%s", ptrtok);
     
     /* get the part of speech */
     ptrtok=strtok(NULL," \n");
     idx->pos = malloc(strlen(ptrtok) + 1);
     assert(idx->pos);
-    strcpy(idx->pos, ptrtok);
+    snprintf(idx->pos, strlen(ptrtok) + 1, "%s", ptrtok);
     
     /* get the collins count */
     ptrtok=strtok(NULL," \n");
@@ -208,7 +233,7 @@ IndexPtr getindex(char *searchstr, int dbase)
 	offset = 0;
 	strtolower(searchstr);
 	for (i = 0; i < MAX_FORMS; i++) {
-	    strcpy(strings[i], searchstr);
+	    snprintf(strings[i], sizeof(strings[i]), "%s", searchstr);
 	    offsets[i] = 0;
 	}
 
@@ -274,7 +299,6 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     static char line[LINEBUF];
     char tbuf[SMLINEBUF];
     char *ptrtok;
-    char *tmpptr;
     int foundpert = 0;
     char wdnum[3];
     int i;
@@ -283,7 +307,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
 
     loc = ftell(fp);
 
-    if ((tmpptr = fgets(line, LINEBUF, fp)) == NULL)
+    if (fgets(line, LINEBUF, fp) == NULL)
 	return(NULL);
     
     synptr = (SynsetPtr)malloc(sizeof(Synset));
@@ -314,8 +338,6 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     synptr->headword = NULL;
     synptr->headsense = 0;
 
-    ptrtok = line;
-    
     /* looking at offset */
     ptrtok = strtok(line," \n");
     synptr->hereiam = atol(ptrtok);
@@ -337,7 +359,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     ptrtok = strtok(NULL, " \n");
     synptr->pos = malloc(strlen(ptrtok) + 1);
     assert(synptr->pos);
-    strcpy(synptr->pos, ptrtok);
+    snprintf(synptr->pos, strlen(ptrtok) + 1, "%s", ptrtok);
     if (getsstype(synptr->pos) == SATELLITE)
 	synptr->sstype = INDIRECT_ANT;
     
@@ -356,7 +378,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
 	ptrtok = strtok(NULL, " \n");
 	synptr->words[i] = malloc(strlen(ptrtok) + 1);
 	assert(synptr->words[i]);
-	strcpy(synptr->words[i], ptrtok);
+	snprintf(synptr->words[i], strlen(ptrtok) + 1, "%s", ptrtok);
 	
 	/* is this the word we're looking for? */
 	
@@ -364,7 +386,11 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
 	    synptr->whichword = i+1;
 	
 	ptrtok = strtok(NULL, " \n");
-	sscanf(ptrtok, "%x", &synptr->lexid[i]);
+	{
+	    unsigned int lexid_val = 0;
+	    sscanf(ptrtok, "%x", &lexid_val);
+	    synptr->lexid[i] = (int)lexid_val;
+	}
     }
     
     /* get the pointer count */
@@ -455,17 +481,17 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     ptrtok = strtok(NULL," \n");
     if (ptrtok) {
 	ptrtok = strtok(NULL," \n");
-	sprintf(tbuf, "");
+	tbuf[0] = '\0';
 	while (ptrtok != NULL) {
-	    strcat(tbuf,ptrtok);
+	    append_str(tbuf, sizeof(tbuf), ptrtok);
 	    ptrtok = strtok(NULL, " \n");
 	    if(ptrtok)
-		strcat(tbuf," ");
+		append_str(tbuf, sizeof(tbuf), " ");
 	}
 	assert((1 + strlen(tbuf)) < sizeof(tbuf));
 	synptr->defn = malloc(strlen(tbuf) + 4);
 	assert(synptr->defn);
-	sprintf(synptr->defn,"(%s)",tbuf);
+	snprintf(synptr->defn, strlen(tbuf) + 4, "(%s)", tbuf);
     }
 
     if (keyindexfp) { 		/* we have unique keys */
@@ -758,21 +784,22 @@ static void traceclassif(SynsetPtr synptr, int dbase, int search)
 		prlist[idx++] = synptr->ptroff[i];
 		printspaces(TRACEP, 0);
 
-		if (synptr->ptrtyp[i] == CLASSIF_CATEGORY)
-		    strcpy(head, "TOPIC->(");
-		else if (synptr->ptrtyp[i] == CLASSIF_USAGE)
-		    strcpy(head, "USAGE->(");
-		else if (synptr->ptrtyp[i] == CLASSIF_REGIONAL)
-		    strcpy(head, "REGION->(");
-		else if (synptr->ptrtyp[i] == CLASS_CATEGORY)
-		    strcpy(head, "TOPIC_TERM->(");
-		else if (synptr->ptrtyp[i] == CLASS_USAGE)
-		    strcpy(head, "USAGE_TERM->(");
-		else if (synptr->ptrtyp[i] == CLASS_REGIONAL)
-		    strcpy(head, "REGION_TERM->(");
+	head[0] = '\0';
+	if (synptr->ptrtyp[i] == CLASSIF_CATEGORY)
+	    append_str(head, sizeof(head), "TOPIC->(");
+	else if (synptr->ptrtyp[i] == CLASSIF_USAGE)
+	    append_str(head, sizeof(head), "USAGE->(");
+	else if (synptr->ptrtyp[i] == CLASSIF_REGIONAL)
+	    append_str(head, sizeof(head), "REGION->(");
+	else if (synptr->ptrtyp[i] == CLASS_CATEGORY)
+	    append_str(head, sizeof(head), "TOPIC_TERM->(");
+	else if (synptr->ptrtyp[i] == CLASS_USAGE)
+	    append_str(head, sizeof(head), "USAGE_TERM->(");
+	else if (synptr->ptrtyp[i] == CLASS_REGIONAL)
+	    append_str(head, sizeof(head), "REGION_TERM->(");
 
-		strcat(head, partnames[synptr->ppos[i]]);
-		strcat(head, ") ");
+	append_str(head, sizeof(head), partnames[synptr->ppos[i]]);
+	append_str(head, sizeof(head), ") ");
 
 		svwnsnsflag = wnsnsflag;
 		wnsnsflag = 1;
@@ -1022,7 +1049,7 @@ int findexample(SynsetPtr synptr)
 	    /* skip over sense key and get sentence numbers */
 
 	    temp += strlen(synptr->words[wdnum]) + 11;
-	    strcpy(tbuf, temp);
+	    snprintf(tbuf, sizeof(tbuf), "%s", temp);
 
 	    offset = strtok(tbuf, " ,\n");
 
@@ -1147,7 +1174,7 @@ void wngrep (char *word_passed, int pos) {
    }
    rewind(inputfile);
 
-   strcpy (word, word_passed);
+   snprintf(word, sizeof(word), "%s", word_passed);
    ToLowerCase(word);		/* map to lower case for index file search */
    strsubst (word, ' ', '_');	/* replace spaces with underscores */
    wordlen = strlen (word);
@@ -1685,7 +1712,10 @@ SynsetPtr traceptrs_ds(SynsetPtr synptr, int ptrtyp, int dbase, int depth)
 				      "");
 		synptr->headword = malloc(strlen(cursyn->words[0]) + 1);
 		assert(synptr->headword);
-		strcpy(synptr->headword, cursyn->words[0]);
+		snprintf(synptr->headword,
+			 strlen(cursyn->words[0]) + 1,
+			 "%s",
+			 cursyn->words[0]);
 		synptr->headsense = cursyn->lexid[0];
 		free_synset(cursyn);
 		break;
@@ -2010,7 +2040,8 @@ static int getsearchsense(SynsetPtr synptr, int whichword)
     IndexPtr idx;
     int i;
 
-    strsubst(strcpy(wdbuf, synptr->words[whichword - 1]), ' ', '_');
+    snprintf(wdbuf, sizeof(wdbuf), "%s", synptr->words[whichword - 1]);
+    strsubst(wdbuf, ' ', '_');
     strtolower(wdbuf);
 		       
     if (idx = index_lookup(wdbuf, getpos(synptr->pos))) {
@@ -2031,15 +2062,15 @@ static void printsynset(char *head, SynsetPtr synptr, char *tail, int definition
 
     tbuf[0] = '\0';		/* clear working buffer */
 
-    strcat(tbuf, head);		/* print head */
+    append_str(tbuf, sizeof(tbuf), head);		/* print head */
 
     /* Precede synset with additional information as indiecated
        by flags */
 
     if (offsetflag)		/* print synset offset */
-	sprintf(tbuf + strlen(tbuf),"{%8.8ld} ", synptr->hereiam);
+	append_fmt(tbuf, sizeof(tbuf), "{%8.8ld} ", synptr->hereiam);
     if (fileinfoflag) {		/* print lexicographer file information */
-	sprintf(tbuf + strlen(tbuf), "<%s> ", lexfiles[synptr->fnum]);
+	append_fmt(tbuf, sizeof(tbuf), "<%s> ", lexfiles[synptr->fnum]);
 	prlexid = 1;		/* print lexicographer id after word */
     } else
 	prlexid = 0;
@@ -2050,15 +2081,15 @@ static void printsynset(char *head, SynsetPtr synptr, char *tail, int definition
 	for(i = 0, wdcnt = synptr->wcount; i < wdcnt; i++) {
 	    catword(tbuf, synptr, i, markerflag, antflag);
 	    if (i < wdcnt - 1)
-		strcat(tbuf, ", ");
+		append_str(tbuf, sizeof(tbuf), ", ");
 	}
     
     if(definition && dflag && synptr->defn) {
-	strcat(tbuf," -- ");
-	strcat(tbuf,synptr->defn);
+	append_str(tbuf, sizeof(tbuf), " -- ");
+	append_str(tbuf, sizeof(tbuf), synptr->defn);
     }
 
-    strcat(tbuf,tail);
+    append_str(tbuf, sizeof(tbuf), tail);
     printbuffer(tbuf);
 }
 
@@ -2072,16 +2103,16 @@ static void printantsynset(SynsetPtr synptr, char *tail, int anttype, int defini
     tbuf[0] = '\0';
 
     if (offsetflag)
-	sprintf(tbuf,"{%8.8ld} ", synptr->hereiam);
+	append_fmt(tbuf, sizeof(tbuf), "{%8.8ld} ", synptr->hereiam);
     if (fileinfoflag) {
-	sprintf(tbuf + strlen(tbuf),"<%s> ", lexfiles[synptr->fnum]);
+	append_fmt(tbuf, sizeof(tbuf), "<%s> ", lexfiles[synptr->fnum]);
 	prlexid = 1;
     } else
 	prlexid = 0;
     
     /* print anotnyms from cluster head (of indirect ant) */
     
-    strcat(tbuf, "INDIRECT (VIA ");
+    append_str(tbuf, sizeof(tbuf), "INDIRECT (VIA ");
     for(i = 0, wdcnt = synptr->wcount; i < wdcnt; i++) {
 	if (first) {
 	    str = printant(ADJ, synptr, i + 1, "%s", ", ");
@@ -2089,24 +2120,24 @@ static void printantsynset(SynsetPtr synptr, char *tail, int anttype, int defini
 	} else
 	    str = printant(ADJ, synptr, i + 1, ", %s", ", ");
 	if (*str)
-	    strcat(tbuf, str);
+	    append_str(tbuf, sizeof(tbuf), str);
     }
-    strcat(tbuf, ") -> ");
+    append_str(tbuf, sizeof(tbuf), ") -> ");
     
     /* now print synonyms from cluster head (of indirect ant) */
     
     for (i = 0, wdcnt = synptr->wcount; i < wdcnt; i++) {
 	catword(tbuf, synptr, i, SKIP_MARKER, SKIP_ANTS);
 	if (i < wdcnt - 1)
-	    strcat(tbuf, ", ");
+	    append_str(tbuf, sizeof(tbuf), ", ");
     }
     
     if(dflag && synptr->defn && definition) {
-	strcat(tbuf," -- ");
-	strcat(tbuf,synptr->defn);
+	append_str(tbuf, sizeof(tbuf), " -- ");
+	append_str(tbuf, sizeof(tbuf), synptr->defn);
     }
     
-    strcat(tbuf,tail);
+    append_str(tbuf, sizeof(tbuf), tail);
     printbuffer(tbuf);
 }
 
@@ -2123,25 +2154,25 @@ static void catword(char *buf, SynsetPtr synptr, int wdnum, int adjmarker, int a
     /* Copy the word (since deadjify() changes original string),
        deadjify() the copy and append to buffer */
     
-    strcpy(wdbuf, synptr->words[wdnum]);
-    strcat(buf, deadjify(wdbuf));
+    snprintf(wdbuf, sizeof(wdbuf), "%s", synptr->words[wdnum]);
+    append_str(buf, SMLINEBUF, deadjify(wdbuf));
 
     /* Print additional lexicographer information and WordNet sense
        number as indicated by flags */
 	
     if (prlexid && (synptr->lexid[wdnum] != 0))
-	sprintf(buf + strlen(buf), "%d", synptr->lexid[wdnum]);
+	append_fmt(buf, SMLINEBUF, "%d", synptr->lexid[wdnum]);
     if (wnsnsflag)
-	sprintf(buf + strlen(buf), "#%d", synptr->wnsns[wdnum]);
+	append_fmt(buf, SMLINEBUF, "#%d", synptr->wnsns[wdnum]);
 
     /* For adjectives, append adjective marker if present, and
        print antonym if flag is passed */
 
     if (getpos(synptr->pos) == ADJ) {
 	if (adjmarker == PRINT_MARKER)
-	    strcat(buf, markers[adj_marker]); 
+	    append_str(buf, SMLINEBUF, markers[adj_marker]); 
 	if (antflag == PRINT_ANTS)
-	    strcat(buf, printant(ADJ, synptr, wdnum + 1, vs, ""));
+	    append_str(buf, SMLINEBUF, printant(ADJ, synptr, wdnum + 1, vs, ""));
     }
 }
 
@@ -2174,23 +2205,23 @@ static char *printant(int dbase, SynsetPtr synptr, int wdnum, char *template, ch
 		    /* Construct buffer containing formatted antonym,
 		       then add it onto end of return buffer */
 
-		    strcpy(wdbuf, psynptr->words[wdoff]);
-		    strcpy(tbuf, deadjify(wdbuf));
+		    snprintf(wdbuf, sizeof(wdbuf), "%s", psynptr->words[wdoff]);
+		    snprintf(tbuf, sizeof(tbuf), "%s", deadjify(wdbuf));
 
 		    /* Print additional lexicographer information and
 		       WordNet sense number as indicated by flags */
 	
 		    if (prlexid && (psynptr->lexid[wdoff] != 0))
-			sprintf(tbuf + strlen(tbuf), "%d",
-				psynptr->lexid[wdoff]);
+			append_fmt(tbuf, sizeof(tbuf), "%d",
+				   psynptr->lexid[wdoff]);
 		    if (wnsnsflag)
-			sprintf(tbuf + strlen(tbuf), "#%d",
-				psynptr->wnsns[wdoff]);
+			append_fmt(tbuf, sizeof(tbuf), "#%d",
+				   psynptr->wnsns[wdoff]);
 		    if (!first)
-			strcat(retbuf, tail);
+			append_str(retbuf, sizeof(retbuf), tail);
 		    else
 			first = 0;
-		    sprintf(retbuf + strlen(retbuf), template, tbuf);
+		    append_fmt(retbuf, sizeof(retbuf), template, tbuf);
 		}
 	    }
 	    free_synset(psynptr);
@@ -2206,7 +2237,7 @@ static void printbuffer(char *string)
     if (strlen(searchbuffer) + strlen(string) >= SEARCHBUF)
         overflag = 1;
     else 
-	strcat(searchbuffer, string);
+	append_str(searchbuffer, sizeof(searchbuffer), string);
 }
 
 static void printsns(SynsetPtr synptr, int sense)

@@ -77,6 +77,16 @@ static int hasprep(char *, int);
 static char *exc_lookup(char *, int);
 static char *morphprep(char *);
 
+static void append_str(char *buf, size_t size, const char *src)
+{
+    size_t len = strlen(buf);
+
+    if (len + 1 >= size) {
+	return;
+    }
+    strncat(buf, src, size - len - 1);
+}
+
 /* Open exception list files */
 
 int morphinit(void)
@@ -132,7 +142,12 @@ static int do_init(void)
 	RegQueryValueEx(hkey, TEXT("WNHome"),
 			NULL, &dwType, searchdir, &dwSize);
 	RegCloseKey(hkey);
-	strcat(searchdir, DICTDIR);
+	{
+	    size_t len = strlen(searchdir);
+	    if (len + 1 < sizeof(searchdir)) {
+		strncat(searchdir, DICTDIR, sizeof(searchdir) - len - 1);
+	    }
+	}
     }
     else if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\WordNet\\3.0"),
 		     0, KEY_READ, &hkey) == ERROR_SUCCESS) {
@@ -140,16 +155,21 @@ static int do_init(void)
 	RegQueryValueEx(hkey, TEXT("WNHome"),
 			NULL, &dwType, searchdir, &dwSize);
 	RegCloseKey(hkey);
-	strcat(searchdir, DICTDIR);
+	{
+	    size_t len = strlen(searchdir);
+	    if (len + 1 < sizeof(searchdir)) {
+		strncat(searchdir, DICTDIR, sizeof(searchdir) - len - 1);
+	    }
+	}
     } else
 	sprintf(searchdir, DEFAULTPATH);
 #else
     if ((env = getenv("WNSEARCHDIR")) != NULL)
-	strcpy(searchdir, env);
+	snprintf(searchdir, sizeof(searchdir), "%s", env);
     else if ((env = getenv("WNHOME")) != NULL)
 	sprintf(searchdir, "%s%s", env, DICTDIR);
     else
-	strcpy(searchdir, DEFAULTPATH);
+	snprintf(searchdir, sizeof(searchdir), "%s", DEFAULTPATH);
 #endif
 
     for (i = 1; i <= NUMPARTS; i++) {
@@ -186,7 +206,8 @@ char *morphstr(char *origstr, int pos)
 
     if (origstr != NULL) {
 	/* Assume string hasn't had spaces substitued with '_' */
-	strtolower(strsubst(strcpy(str, origstr), ' ', '_'));
+	snprintf(str, sizeof(str), "%s", origstr);
+	strtolower(strsubst(str, ' ', '_'));
 	searchstr[0] = '\0';
 	cnt = cntwords(str, '_');
 	svprep = 0;
@@ -233,17 +254,18 @@ char *morphstr(char *origstr, int pos)
 		strncpy(word, str + st_idx, end_idx - st_idx);
 		word[end_idx - st_idx] = '\0';
 		if ((tmp = morphword(word, pos)) != NULL)
-		    strcat(searchstr,tmp);
+		    append_str(searchstr, sizeof(searchstr), tmp);
 		else
-		    strcat(searchstr,word);
-		strcat(searchstr, append);
+		    append_str(searchstr, sizeof(searchstr), word);
+		append_str(searchstr, sizeof(searchstr), append);
 		st_idx = end_idx + 1;
 	    }
 	    
-	    if ((tmp = morphword(strcpy(word, str + st_idx), pos)) != NULL)
-		strcat(searchstr,tmp);
+	    snprintf(word, sizeof(word), "%s", str + st_idx);
+	    if ((tmp = morphword(word, pos)) != NULL)
+		append_str(searchstr, sizeof(searchstr), tmp);
 	    else
-		strcat(searchstr,word);
+		append_str(searchstr, sizeof(searchstr), word);
 	    if(strcmp(searchstr, str) && is_defined(searchstr,pos))
 		return(searchstr);
 	    else
@@ -273,8 +295,8 @@ char *morphword(char *word, int pos)
     static char retval[WORDBUF];
     char *tmp, tmpbuf[WORDBUF], *end;
     
-    sprintf(retval,"");
-    sprintf(tmpbuf, "");
+    retval[0] = '\0';
+    tmpbuf[0] = '\0';
     end = "";
     
     if(word == NULL) 
@@ -302,15 +324,15 @@ char *morphword(char *word, int pos)
 /* If not in exception list, try applying rules from tables */
 
     if (tmpbuf[0] == '\0')
-	strcpy(tmpbuf, word);
+	snprintf(tmpbuf, sizeof(tmpbuf), "%s", word);
 
     offset = offsets[pos];
     cnt = cnts[pos];
 
     for(i = 0; i < cnt; i++){
-	strcpy(retval, wordbase(tmpbuf, (i + offset)));
+	snprintf(retval, sizeof(retval), "%s", wordbase(tmpbuf, (i + offset)));
 	if(strcmp(retval, tmpbuf) && is_defined(retval, pos)) {
-	    strcat(retval, end);
+	    append_str(retval, sizeof(retval), end);
 	    return(retval);
 	}
     }
@@ -336,12 +358,12 @@ static char *wordbase(char *word, int ender)
     char *pt1;
     static char copy[WORDBUF];
     
-    strcpy(copy, word);
+    snprintf(copy, sizeof(copy), "%s", word);
     if(strend(copy,sufx[ender])) {
 	pt1=strchr(copy,'\0');
 	pt1 -= strlen(sufx[ender]);
 	*pt1='\0';
-	strcat(copy,addr[ender]);
+	append_str(copy, sizeof(copy), addr[ender]);
     }
     return(copy);
 }
@@ -368,7 +390,6 @@ static char *exc_lookup(char *word, int pos)
 {
     static char line[WORDBUF], *beglp, *endlp;
     char *excline;
-    int found = 0;
 
     if (exc_fps[pos] == NULL)
 	return(NULL);
@@ -376,14 +397,14 @@ static char *exc_lookup(char *word, int pos)
     /* first time through load line from exception file */
     if(word != NULL){
 	if ((excline = bin_search(word, exc_fps[pos])) != NULL) {
-	    strcpy(line, excline);
+	    snprintf(line, sizeof(line), "%s", excline);
 	    endlp = strchr(line,' ');
 	} else
 	    endlp = NULL;
     }
     if(endlp && *(endlp + 1) != ' '){
 	beglp = endlp + 1;
-	while(*beglp && *beglp == ' ') beglp++;
+	while(*beglp == ' ') beglp++;
 	endlp = beglp;
 	while(*endlp && *endlp != ' ' && *endlp != '\n') endlp++;
 	if(endlp != beglp){
@@ -413,7 +434,7 @@ static char *morphprep(char *s)
 	if ((lastwd = morphword(last + 1, NOUN)) != NULL) {
 	    strncpy(end, rest, last - rest + 1);
 	    end[last-rest+1] = '\0';
-	    strcat(end, lastwd);
+	    append_str(end, sizeof(end), lastwd);
 	}
     }
     
@@ -430,11 +451,11 @@ static char *morphprep(char *s)
     if ((exc_word = exc_lookup(word, VERB)) &&
 	strcmp(exc_word, word)) {
 
-	sprintf(retval, "%s%s", exc_word, rest);
+	snprintf(retval, sizeof(retval), "%s%s", exc_word, rest);
 	if(is_defined(retval, VERB))
 	    return(retval);
 	else if (lastwd) {
-	    sprintf(retval, "%s%s", exc_word, end);
+	    snprintf(retval, sizeof(retval), "%s%s", exc_word, end);
 	    if(is_defined(retval, VERB))
 		return(retval);
 	}
@@ -444,17 +465,17 @@ static char *morphprep(char *s)
 	if ((exc_word = wordbase(word, (i + offset))) &&
 	    strcmp(word, exc_word)) { /* ending is different */
 
-	    sprintf(retval, "%s%s", exc_word, rest);
+	    snprintf(retval, sizeof(retval), "%s%s", exc_word, rest);
 	    if(is_defined(retval, VERB))
 		return(retval);
 	    else if (lastwd) {
-		sprintf(retval, "%s%s", exc_word, end);
+		snprintf(retval, sizeof(retval), "%s%s", exc_word, end);
 		if(is_defined(retval, VERB))
 		    return(retval);
 	    }
 	}
     }
-    sprintf(retval, "%s%s", word, rest);
+    snprintf(retval, sizeof(retval), "%s%s", word, rest);
     if (strcmp(s, retval))
 	return(retval);
     if (lastwd) {
