@@ -230,5 +230,5 @@ char *insert_line(const char *new_line, const char *searchkey, FILE *fp)
     fclose(tfp);
     fflush(fp);
 
-    return(new_line);
+    return((char *)new_line);
 }

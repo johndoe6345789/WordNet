@@ -2045,7 +2045,7 @@ static int getsearchsense(SynsetPtr synptr, int whichword)
     strsubst(wdbuf, ' ', '_');
     strtolower(wdbuf);
 		       
-    if (idx = index_lookup(wdbuf, getpos(synptr->pos))) {
+    if ((idx = index_lookup(wdbuf, getpos(synptr->pos))) != NULL) {
 	for (i = 0; i < idx->off_cnt; i++)
 	    if (idx->offset[i] == synptr->hereiam) {
 		free_index(idx);
