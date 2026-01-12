@@ -35,6 +35,12 @@ struct chat_context {
     int language_score;
     int platform_score;
     int framework_score;
+    char alt_languages[MAX_LIST][MAX_TERM];
+    int alt_language_count;
+    char alt_platforms[MAX_LIST][MAX_TERM];
+    int alt_platform_count;
+    char alt_frameworks[MAX_LIST][MAX_TERM];
+    int alt_framework_count;
     struct {
         char term[MAX_TERM];
         int count;
@@ -94,6 +100,11 @@ static int add_unique(char list[][MAX_TERM], int *count, const char *value)
     snprintf(list[*count], MAX_TERM, "%s", value);
     (*count)++;
     return 1;
+}
+
+static void add_alt(char list[][MAX_TERM], int *count, const char *value)
+{
+    add_unique(list, count, value);
 }
 
 static void add_term_count(struct chat_context *ctx, const char *term, int weight)
@@ -457,22 +468,28 @@ static void merge_context(struct chat_context *ctx,
             add_unique(ctx->qualifiers, &ctx->qualifier_count, qualifiers[i]);
         }
     }
-    if (language[0] != '\0' && language_score >= ctx->language_score) {
-        if (language_score > ctx->language_score || strcmp(ctx->language, language) == 0) {
+    if (language[0] != '\0') {
+        if (ctx->language[0] == '\0' || language_score > ctx->language_score) {
             snprintf(ctx->language, sizeof(ctx->language), "%s", language);
             ctx->language_score = language_score;
+        } else if (strcmp(ctx->language, language) != 0) {
+            add_alt(ctx->alt_languages, &ctx->alt_language_count, language);
         }
     }
-    if (platform[0] != '\0' && platform_score >= ctx->platform_score) {
-        if (platform_score > ctx->platform_score || strcmp(ctx->platform, platform) == 0) {
+    if (platform[0] != '\0') {
+        if (ctx->platform[0] == '\0' || platform_score > ctx->platform_score) {
             snprintf(ctx->platform, sizeof(ctx->platform), "%s", platform);
             ctx->platform_score = platform_score;
+        } else if (strcmp(ctx->platform, platform) != 0) {
+            add_alt(ctx->alt_platforms, &ctx->alt_platform_count, platform);
         }
     }
-    if (framework[0] != '\0' && framework_score >= ctx->framework_score) {
-        if (framework_score > ctx->framework_score || strcmp(ctx->framework, framework) == 0) {
+    if (framework[0] != '\0') {
+        if (ctx->framework[0] == '\0' || framework_score > ctx->framework_score) {
             snprintf(ctx->framework, sizeof(ctx->framework), "%s", framework);
             ctx->framework_score = framework_score;
+        } else if (strcmp(ctx->framework, framework) != 0) {
+            add_alt(ctx->alt_frameworks, &ctx->alt_framework_count, framework);
         }
     }
 }
@@ -725,13 +742,46 @@ static void print_context_check(struct chat_context *ctx)
     if (ctx->language[0]) {
         printf("  confidence: %d\n", ctx->language_score);
     }
+    if (ctx->alt_language_count > 0) {
+        int i;
+        printf("  alternatives: ");
+        for (i = 0; i < ctx->alt_language_count; i++) {
+            if (i > 0) {
+                printf(", ");
+            }
+            printf("%s", ctx->alt_languages[i]);
+        }
+        printf("\n");
+    }
     printf("- platform: %s\n", ctx->platform[0] ? ctx->platform : "(unspecified)");
     if (ctx->platform[0]) {
         printf("  confidence: %d\n", ctx->platform_score);
     }
+    if (ctx->alt_platform_count > 0) {
+        int i;
+        printf("  alternatives: ");
+        for (i = 0; i < ctx->alt_platform_count; i++) {
+            if (i > 0) {
+                printf(", ");
+            }
+            printf("%s", ctx->alt_platforms[i]);
+        }
+        printf("\n");
+    }
     printf("- framework: %s\n", ctx->framework[0] ? ctx->framework : "(unspecified)");
     if (ctx->framework[0]) {
         printf("  confidence: %d\n", ctx->framework_score);
+    }
+    if (ctx->alt_framework_count > 0) {
+        int i;
+        printf("  alternatives: ");
+        for (i = 0; i < ctx->alt_framework_count; i++) {
+            if (i > 0) {
+                printf(", ");
+            }
+            printf("%s", ctx->alt_frameworks[i]);
+        }
+        printf("\n");
     }
 
     if (count == 0) {
@@ -784,6 +834,7 @@ static void print_help(const char *prog)
     printf("  /exit        Exit the chat\n");
     printf("  /summary     Show averaged memory summary\n");
     printf("  /reflect     Show context check\n");
+    printf("  /json        Print current context as JSON\n");
     printf("  /reset       Clear memory and context\n");
     printf("\n");
     printf("examples:\n");
@@ -791,16 +842,81 @@ static void print_help(const char *prog)
     printf("  add retries and backoff for failed requests\n");
 }
 
-int main(void)
+static void print_json_context(struct chat_context *ctx)
+{
+    int i;
+
+    printf("{\n");
+    printf("  \"turns\": %d,\n", ctx->turns);
+    printf("  \"actions\": [");
+    for (i = 0; i < ctx->action_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->actions[i]);
+    }
+    printf("],\n");
+    printf("  \"entities\": [");
+    for (i = 0; i < ctx->entity_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->entities[i]);
+    }
+    printf("],\n");
+    printf("  \"qualifiers\": [");
+    for (i = 0; i < ctx->qualifier_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->qualifiers[i]);
+    }
+    printf("],\n");
+    printf("  \"language\": {\"value\": \"%s\", \"score\": %d, \"alternatives\": [",
+           ctx->language[0] ? ctx->language : "", ctx->language_score);
+    for (i = 0; i < ctx->alt_language_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->alt_languages[i]);
+    }
+    printf("]},\n");
+    printf("  \"platform\": {\"value\": \"%s\", \"score\": %d, \"alternatives\": [",
+           ctx->platform[0] ? ctx->platform : "", ctx->platform_score);
+    for (i = 0; i < ctx->alt_platform_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->alt_platforms[i]);
+    }
+    printf("]},\n");
+    printf("  \"framework\": {\"value\": \"%s\", \"score\": %d, \"alternatives\": [",
+           ctx->framework[0] ? ctx->framework : "", ctx->framework_score);
+    for (i = 0; i < ctx->alt_framework_count; i++) {
+        if (i > 0) {
+            printf(", ");
+        }
+        printf("\"%s\"", ctx->alt_frameworks[i]);
+    }
+    printf("]}\n");
+    printf("}\n");
+}
+
+int main(int argc, char **argv)
 {
     char input[MAX_INPUT];
     struct chat_context ctx;
+    int quiet = 0;
 
     memset(&ctx, 0, sizeof(ctx));
     set_default_searchdir();
     if (wninit() != 0) {
         fprintf(stderr, "WordNet data files not found. Set WNHOME or WNSEARCHDIR.\n");
         return 1;
+    }
+
+    if (argc > 1 && strcmp(argv[1], "--quiet") == 0) {
+        quiet = 1;
     }
 
     printf("DIY AI Chat (type /help for commands)\n");
@@ -829,13 +945,19 @@ int main(void)
             print_context_check(&ctx);
             continue;
         }
+        if (strcmp(input, "/json") == 0) {
+            print_json_context(&ctx);
+            continue;
+        }
         if (strcmp(input, "/reset") == 0) {
             reset_context(&ctx);
             printf("Memory reset.\n");
             continue;
         }
         analyze_input(input, &ctx);
-        print_context_check(&ctx);
+        if (!quiet) {
+            print_context_check(&ctx);
+        }
     }
     return 0;
 }
