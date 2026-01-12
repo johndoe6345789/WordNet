@@ -139,7 +139,6 @@ IndexPtr parse_index(long offset, int dbase, char *line) {
     
     IndexPtr idx = NULL;
     char *ptrtok;
-    char *tmpptr;
     int j;
 
     if ( !line )
@@ -300,6 +299,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
     static char line[LINEBUF];
     char tbuf[SMLINEBUF];
     char *ptrtok;
+    char *tmpptr;
     int foundpert = 0;
     char wdnum[3];
     int i;
@@ -467,7 +467,7 @@ SynsetPtr parse_synset(FILE *fp, int dbase, char *word)
 	
 	for(i=0;i<synptr->fcount;i++) {
 	    /* skip the frame pointer (+) */
-	    ptrtok = strtok(NULL," \n");
+	    (void)strtok(NULL, " \n");
 	    
 	    ptrtok = strtok(NULL," \n");
 	    synptr->frmid[i] = atoi(ptrtok);
@@ -1283,7 +1283,7 @@ static void findverbgroups(IndexPtr idx)
 static void add_relatives(int pos, IndexPtr idx, int rel1, int rel2)
 {
     int i;
-    struct relgrp *rel, *last, *r;
+    struct relgrp *rel, *last = NULL, *r;
 
     /* If either of the new relatives are already in a relative group,
        then add the other to the existing group (transitivity).
@@ -1309,8 +1309,10 @@ static void add_relatives(int pos, IndexPtr idx, int rel1, int rel2)
     rel->senses[rel1] = rel->senses[rel2] = 1;
     if (rellist == NULL)
 	rellist = rel;
-    else
+    else if (last != NULL)
 	last->next = rel;
+    else
+	rellist = rel;
 }
 
 static struct relgrp *mkrellist(void)
@@ -1683,7 +1685,7 @@ SynsetPtr findtheinfo_ds(char *searchstr, int dbase, int ptrtyp, int whichsense)
 	free_index(idx);
 	wnresults.numforms++;
 
-	if (ptrtyp == COORDS) {	/* clean up by removing hypernym */
+	if (ptrtyp == COORDS && synlist != NULL && synlist->ptrlist != NULL) {
 	    lastsyn = synlist->ptrlist;
 	    synlist->ptrlist = lastsyn->ptrlist;
 	    free_synset(lastsyn);
@@ -1767,7 +1769,6 @@ static void WNOverview(char *searchstr, int pos)
     int svdflag, skipit;
     unsigned long offsets[MAXSENSE];
 
-    cpstring = searchstr;
     bufstart = searchbuffer;
     for (i = 0; i < MAXSENSE; i++)
 	offsets[i] = 0;

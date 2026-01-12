@@ -346,7 +346,6 @@ static int strend(char *str1, char *str2)
     if(strlen(str2) >= strlen(str1))
 	return(0);
     else {
-	pt1=str1;
 	pt1=strchr(str1,0);
 	pt1=pt1-strlen(str2);
 	return(!strcmp(pt1,str2));
@@ -462,8 +461,8 @@ static char *morphprep(char *s)
     }
     
     for (i = 0; i < cnt; i++) {
-	if ((exc_word = wordbase(word, (i + offset))) &&
-	    strcmp(word, exc_word)) { /* ending is different */
+	exc_word = wordbase(word, (i + offset));
+	if (strcmp(word, exc_word)) { /* ending is different */
 
 	    snprintf(retval, sizeof(retval), "%s%s", exc_word, rest);
 	    if(is_defined(retval, VERB))
