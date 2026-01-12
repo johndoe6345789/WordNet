@@ -49,6 +49,30 @@ struct chat_context {
     int turns;
 };
 
+struct related_term {
+    char term[MAX_TERM];
+    char gloss[MAX_GLOSS];
+    char synonyms[MAX_LIST][MAX_TERM];
+    int synonym_count;
+    char hypernyms[MAX_LIST][MAX_TERM];
+    int hypernym_count;
+};
+
+struct analysis_result {
+    char actions[MAX_LIST][MAX_TERM];
+    int action_count;
+    char entities[MAX_LIST][MAX_TERM];
+    int entity_count;
+    char qualifiers[MAX_LIST][MAX_TERM];
+    int qualifier_count;
+    struct related_term related[MAX_LIST];
+    int related_count;
+    char sdlc_focus[2][MAX_TERM];
+    int sdlc_focus_count;
+    char design_focus[3][MAX_TERM];
+    int design_focus_count;
+};
+
 static int is_noise_token(const char *word);
 
 static const char *stopwords[] = {
@@ -82,7 +106,7 @@ static void set_default_searchdir(void)
 #endif
 }
 
-static int add_unique(char list[][MAX_TERM], int *count, const char *value)
+static int add_unique(char list[][MAX_TERM], int *count, int limit, const char *value)
 {
     int i;
 
@@ -94,7 +118,7 @@ static int add_unique(char list[][MAX_TERM], int *count, const char *value)
             return 0;
         }
     }
-    if (*count >= MAX_CONCEPT_TERMS) {
+    if (*count >= limit) {
         return 0;
     }
     snprintf(list[*count], MAX_TERM, "%s", value);
@@ -104,7 +128,7 @@ static int add_unique(char list[][MAX_TERM], int *count, const char *value)
 
 static void add_alt(char list[][MAX_TERM], int *count, const char *value)
 {
-    add_unique(list, count, value);
+    add_unique(list, count, MAX_LIST, value);
 }
 
 static void add_term_count(struct chat_context *ctx, const char *term, int weight)
@@ -215,7 +239,7 @@ static int add_concept_term(struct concept *concept, const char *term)
     if (buf[0] == '\0') {
         return 0;
     }
-    return add_unique(concept->terms, &concept->term_count, buf);
+    return add_unique(concept->terms, &concept->term_count, MAX_CONCEPT_TERMS, buf);
 }
 
 static void collect_from_synset(struct concept *concept, SynsetPtr syn)
@@ -337,7 +361,46 @@ static int token_matches(const char *token, struct concept *concept)
     return 0;
 }
 
-static void rank_concepts(struct concept *concepts, int concept_count, char list[][MAX_TERM], int list_count)
+static int term_frequency(struct chat_context *ctx, const char *term)
+{
+    int i;
+
+    if (term == NULL || term[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; i < ctx->term_count; i++) {
+        if (strcmp(ctx->terms[i].term, term) == 0) {
+            return ctx->terms[i].count;
+        }
+    }
+    return 0;
+}
+
+static int related_match_score(struct analysis_result *analysis, const char *term)
+{
+    int i;
+    int j;
+
+    for (i = 0; i < analysis->related_count; i++) {
+        struct related_term *rel = &analysis->related[i];
+        for (j = 0; j < rel->synonym_count; j++) {
+            if (strcmp(rel->synonyms[j], term) == 0) {
+                return 2;
+            }
+        }
+        for (j = 0; j < rel->hypernym_count; j++) {
+            if (strcmp(rel->hypernyms[j], term) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void rank_concepts(struct concept *concepts, int concept_count,
+                          char list[][MAX_TERM], int list_count,
+                          struct chat_context *ctx,
+                          struct analysis_result *analysis)
 {
     int i;
     int j;
@@ -348,38 +411,20 @@ static void rank_concepts(struct concept *concepts, int concept_count, char list
     for (i = 0; i < list_count; i++) {
         for (j = 0; j < concept_count; j++) {
             if (token_matches(list[i], &concepts[j])) {
-                concepts[j].score += 1;
+                int freq = term_frequency(ctx, list[i]);
+                int boost = freq > 4 ? 2 : (freq > 0 ? 1 : 0);
+                concepts[j].score += 2 + boost;
             }
         }
     }
-}
-
-static void print_top_concepts(struct concept *concepts, int concept_count, const char *type, int max_count)
-{
-    int i;
-    int printed = 0;
-
-    for (i = 0; i < concept_count && printed < max_count; i++) {
-        int j;
-        int best = -1;
-
-        for (j = 0; j < concept_count; j++) {
-            if (strcmp(concepts[j].type, type) != 0) {
-                continue;
-            }
-            if (best == -1 || concepts[j].score > concepts[best].score) {
-                best = j;
+    for (j = 0; j < concept_count; j++) {
+        int k;
+        for (k = 0; k < concepts[j].term_count; k++) {
+            int rel_score = related_match_score(analysis, concepts[j].terms[k]);
+            if (rel_score > 0) {
+                concepts[j].score += rel_score;
             }
         }
-        if (best == -1 || concepts[best].score <= 0) {
-            break;
-        }
-        printf("  - %s\n", concepts[best].name);
-        concepts[best].score = -1;
-        printed++;
-    }
-    if (printed == 0) {
-        printf("  - (unsure)\n");
     }
 }
 
@@ -455,17 +500,17 @@ static void merge_context(struct chat_context *ctx,
 
     if (action_count > 0) {
         for (i = 0; i < action_count; i++) {
-            add_unique(ctx->actions, &ctx->action_count, actions[i]);
+            add_unique(ctx->actions, &ctx->action_count, MAX_LIST, actions[i]);
         }
     }
     if (entity_count > 0) {
         for (i = 0; i < entity_count; i++) {
-            add_unique(ctx->entities, &ctx->entity_count, entities[i]);
+            add_unique(ctx->entities, &ctx->entity_count, MAX_LIST, entities[i]);
         }
     }
     if (qualifier_count > 0) {
         for (i = 0; i < qualifier_count; i++) {
-            add_unique(ctx->qualifiers, &ctx->qualifier_count, qualifiers[i]);
+            add_unique(ctx->qualifiers, &ctx->qualifier_count, MAX_LIST, qualifiers[i]);
         }
     }
     if (language[0] != '\0') {
@@ -494,16 +539,107 @@ static void merge_context(struct chat_context *ctx,
     }
 }
 
-static void analyze_input(const char *input, struct chat_context *ctx)
+static void init_analysis(struct analysis_result *analysis)
+{
+    memset(analysis, 0, sizeof(*analysis));
+}
+
+static struct related_term *find_or_add_related(struct analysis_result *analysis, const char *term)
+{
+    int i;
+
+    for (i = 0; i < analysis->related_count; i++) {
+        if (strcmp(analysis->related[i].term, term) == 0) {
+            return &analysis->related[i];
+        }
+    }
+    if (analysis->related_count >= MAX_LIST) {
+        return NULL;
+    }
+    snprintf(analysis->related[analysis->related_count].term, MAX_TERM, "%s", term);
+    analysis->related[analysis->related_count].gloss[0] = '\0';
+    return &analysis->related[analysis->related_count++];
+}
+
+static void fetch_related_terms(const char *term, int pos, SynsetPtr syn,
+                                struct analysis_result *analysis,
+                                struct chat_context *ctx)
+{
+    int i;
+    struct related_term *related = find_or_add_related(analysis, term);
+
+    if (related == NULL || syn == NULL) {
+        return;
+    }
+    for (i = 0; i < syn->wcount; i++) {
+        char synword[MAX_TERM];
+        snprintf(synword, sizeof(synword), "%s", syn->words[i]);
+        normalize_word(synword);
+        if (!is_noise_token(synword)) {
+            add_unique(related->synonyms, &related->synonym_count, MAX_LIST, synword);
+        }
+    }
+    if (syn->defn != NULL && related->gloss[0] == '\0') {
+        snprintf(related->gloss, sizeof(related->gloss), "%s", syn->defn);
+    }
+    for (i = 0; i < syn->ptrcount; i++) {
+        if (syn->ptrtyp[i] != HYPERPTR) {
+            continue;
+        }
+        if (syn->ppos[i] == 0) {
+            continue;
+        }
+        SynsetPtr hyper = read_synset(syn->ppos[i], syn->ptroff[i], term);
+        if (hyper != NULL) {
+            int w;
+            for (w = 0; w < hyper->wcount; w++) {
+                char hyperword[MAX_TERM];
+                snprintf(hyperword, sizeof(hyperword), "%s", hyper->words[w]);
+                normalize_word(hyperword);
+                if (!is_noise_token(hyperword)) {
+                    add_unique(related->hypernyms, &related->hypernym_count, MAX_LIST, hyperword);
+                    add_term_count(ctx, hyperword, 1);
+                }
+            }
+            free_synset(hyper);
+        }
+    }
+    (void)pos;
+}
+
+static void capture_top_concepts(struct concept *concepts, int concept_count,
+                                 const char *type, char list[][MAX_TERM], int *out_count, int max_count)
+{
+    int i;
+    int printed = 0;
+
+    *out_count = 0;
+    for (i = 0; i < concept_count && printed < max_count; i++) {
+        int j;
+        int best = -1;
+
+        for (j = 0; j < concept_count; j++) {
+            if (strcmp(concepts[j].type, type) != 0) {
+                continue;
+            }
+            if (best == -1 || concepts[j].score > concepts[best].score) {
+                best = j;
+            }
+        }
+        if (best == -1 || concepts[best].score <= 0) {
+            break;
+        }
+        snprintf(list[printed], MAX_TERM, "%s", concepts[best].name);
+        concepts[best].score = -1;
+        printed++;
+    }
+    *out_count = printed;
+}
+
+static void analyze_input(const char *input, struct chat_context *ctx, struct analysis_result *analysis)
 {
     struct concept concepts[MAX_CONCEPTS];
     int concept_count = 0;
-    char actions[MAX_LIST][MAX_TERM];
-    char entities[MAX_LIST][MAX_TERM];
-    char qualifiers[MAX_LIST][MAX_TERM];
-    int action_count = 0;
-    int entity_count = 0;
-    int qualifier_count = 0;
     char language[MAX_TERM];
     char platform[MAX_TERM];
     char framework[MAX_TERM];
@@ -514,6 +650,7 @@ static void analyze_input(const char *input, struct chat_context *ctx)
     size_t i;
     size_t j = 0;
 
+    init_analysis(analysis);
     init_concepts(concepts, &concept_count);
     ctx->turns++;
 
@@ -554,11 +691,11 @@ static void analyze_input(const char *input, struct chat_context *ctx)
                 snprintf(lemma, sizeof(lemma), "%s", normalized);
 
                 if (pos == VERB) {
-                    add_unique(actions, &action_count, lemma);
+                    add_unique(analysis->actions, &analysis->action_count, MAX_LIST, lemma);
                 } else if (pos == NOUN) {
-                    add_unique(entities, &entity_count, lemma);
+                    add_unique(analysis->entities, &analysis->entity_count, MAX_LIST, lemma);
                 } else if (pos == ADJ || pos == ADV) {
-                    add_unique(qualifiers, &qualifier_count, lemma);
+                    add_unique(analysis->qualifiers, &analysis->qualifier_count, MAX_LIST, lemma);
                 }
                 syn = read_synset(pos, idx->offset[0], lemma);
                 if (syn != NULL) {
@@ -568,125 +705,47 @@ static void analyze_input(const char *input, struct chat_context *ctx)
                         snprintf(synword, sizeof(synword), "%s", syn->words[w]);
                         normalize_word(synword);
                         if (!is_noise_token(synword)) {
-                            add_unique(entities, &entity_count, synword);
+                            add_unique(analysis->entities, &analysis->entity_count, MAX_LIST, synword);
                         }
                     }
+                    fetch_related_terms(normalized, pos, syn, analysis, ctx);
                     collect_memory_from_synset(ctx, syn);
                     free_synset(syn);
                 }
                 free_index(idx);
             }
             if (!matched_pos) {
-                add_unique(entities, &entity_count, normalized);
+                add_unique(analysis->entities, &analysis->entity_count, MAX_LIST, normalized);
             }
         }
     }
 
-    if (action_count > 1) {
+    if (analysis->action_count > 1) {
         int filtered = 0;
-        for (i = 0; i < (size_t)action_count; i++) {
-            if (!is_generic_verb(actions[i])) {
-                snprintf(actions[filtered], MAX_TERM, "%s", actions[i]);
+        for (i = 0; i < (size_t)analysis->action_count; i++) {
+            if (!is_generic_verb(analysis->actions[i])) {
+                snprintf(analysis->actions[filtered], MAX_TERM, "%s", analysis->actions[i]);
                 filtered++;
             }
         }
         if (filtered > 0) {
-            action_count = filtered;
+            analysis->action_count = filtered;
         }
     }
 
-    language_score = extract_language(entities, entity_count, language, sizeof(language));
-    platform_score = extract_platform(entities, entity_count, platform, sizeof(platform));
-    framework_score = extract_framework(entities, entity_count, framework, sizeof(framework));
-    rank_concepts(concepts, concept_count, entities, entity_count);
-    merge_context(ctx, actions, action_count, entities, entity_count,
-                  qualifiers, qualifier_count,
+    language_score = extract_language(analysis->entities, analysis->entity_count, language, sizeof(language));
+    platform_score = extract_platform(analysis->entities, analysis->entity_count, platform, sizeof(platform));
+    framework_score = extract_framework(analysis->entities, analysis->entity_count, framework, sizeof(framework));
+    rank_concepts(concepts, concept_count, analysis->entities, analysis->entity_count, ctx, analysis);
+    merge_context(ctx, analysis->actions, analysis->action_count, analysis->entities, analysis->entity_count,
+                  analysis->qualifiers, analysis->qualifier_count,
                   language, language_score,
                   platform, platform_score,
                   framework, framework_score);
-
-    printf("\nIntent sketch\n");
-    printf("- actions: ");
-    if (ctx->action_count == 0) {
-        printf("(none)\n");
-    } else {
-        int i;
-        for (i = 0; i < ctx->action_count && i < 6; i++) {
-            if (i > 0) {
-                printf(", ");
-            }
-            printf("%s", ctx->actions[i]);
-        }
-        printf("\n");
-    }
-    printf("- entities: ");
-    if (ctx->entity_count == 0) {
-        printf("(none)\n");
-    } else {
-        int i;
-        for (i = 0; i < ctx->entity_count && i < 6; i++) {
-            if (i > 0) {
-                printf(", ");
-            }
-            printf("%s", ctx->entities[i]);
-        }
-        printf("\n");
-    }
-    if (ctx->qualifier_count > 0) {
-        int i;
-        printf("- qualifiers: ");
-        for (i = 0; i < ctx->qualifier_count && i < 6; i++) {
-            if (i > 0) {
-                printf(", ");
-            }
-            printf("%s", ctx->qualifiers[i]);
-        }
-        printf("\n");
-    }
-
-    printf("\nSDLC focus\n");
-    print_top_concepts(concepts, concept_count, "sdlc", 2);
-    printf("\nDesign focus\n");
-    print_top_concepts(concepts, concept_count, "design", 3);
-
-    printf("\nLikely defaults\n");
-    printf("- language: %s\n", ctx->language[0] ? ctx->language : "(unspecified)");
-    if (ctx->language[0]) {
-        printf("  confidence: %d\n", ctx->language_score);
-    }
-    printf("- platform: %s\n", ctx->platform[0] ? ctx->platform : "(unspecified)");
-    if (ctx->platform[0]) {
-        printf("  confidence: %d\n", ctx->platform_score);
-    }
-    printf("- framework: %s\n", ctx->framework[0] ? ctx->framework : "(unspecified)");
-    if (ctx->framework[0]) {
-        printf("  confidence: %d\n", ctx->framework_score);
-    }
-
-    printf("\nQuestions\n");
-    if (ctx->action_count == 0) {
-        printf("- What should the system do?\n");
-    }
-    if (ctx->entity_count == 0) {
-        printf("- What should it operate on?\n");
-    }
-    if (ctx->language[0] == '\0') {
-        printf("- Which language or runtime should I target?\n");
-    }
-    if (ctx->platform[0] == '\0') {
-        printf("- Should this be a CLI, service, library, or UI?\n");
-    }
-}
-
-static int compare_terms(const void *a, const void *b)
-{
-    const int *ia = (const int *)a;
-    const int *ib = (const int *)b;
-
-    if (*ia != *ib) {
-        return (*ib - *ia);
-    }
-    return 0;
+    capture_top_concepts(concepts, concept_count, "sdlc",
+                         analysis->sdlc_focus, &analysis->sdlc_focus_count, 2);
+    capture_top_concepts(concepts, concept_count, "design",
+                         analysis->design_focus, &analysis->design_focus_count, 3);
 }
 
 static void print_summary(struct chat_context *ctx)
@@ -819,6 +878,145 @@ static void print_context_check(struct chat_context *ctx)
     printf("\n");
 }
 
+static void print_related_terms(struct analysis_result *analysis)
+{
+    int i;
+    int shown = 0;
+
+    for (i = 0; i < analysis->related_count && shown < 3; i++) {
+        struct related_term *rel = &analysis->related[i];
+        if (rel->term[0] == '\0') {
+            continue;
+        }
+        printf("- %s", rel->term);
+        if (rel->gloss[0] != '\0') {
+            printf(": %s", rel->gloss);
+        }
+        printf("\n");
+        if (rel->synonym_count > 0) {
+            int s;
+            printf("  synonyms: ");
+            for (s = 0; s < rel->synonym_count && s < 5; s++) {
+                if (s > 0) {
+                    printf(", ");
+                }
+                printf("%s", rel->synonyms[s]);
+            }
+            printf("\n");
+        }
+        if (rel->hypernym_count > 0) {
+            int h;
+            printf("  hypernyms: ");
+            for (h = 0; h < rel->hypernym_count && h < 4; h++) {
+                if (h > 0) {
+                    printf(", ");
+                }
+                printf("%s", rel->hypernyms[h]);
+            }
+            printf("\n");
+        }
+        shown++;
+    }
+}
+
+static void generate_response(struct chat_context *ctx, struct analysis_result *analysis)
+{
+    printf("\nResponse\n");
+
+    if (analysis->action_count > 0 || analysis->entity_count > 0) {
+        printf("- intent: ");
+        if (analysis->action_count > 0) {
+            printf("%s", analysis->actions[0]);
+            if (analysis->entity_count > 0) {
+                printf(" %s", analysis->entities[0]);
+            }
+        } else if (analysis->entity_count > 0) {
+            printf("work with %s", analysis->entities[0]);
+        } else {
+            printf("(unsure)");
+        }
+        printf("\n");
+    }
+
+    if (analysis->sdlc_focus_count > 0) {
+        int i;
+        printf("- sdlc focus: ");
+        for (i = 0; i < analysis->sdlc_focus_count; i++) {
+            if (i > 0) {
+                printf(", ");
+            }
+            printf("%s", analysis->sdlc_focus[i]);
+        }
+        printf("\n");
+    }
+    if (analysis->design_focus_count > 0) {
+        int i;
+        printf("- design focus: ");
+        for (i = 0; i < analysis->design_focus_count; i++) {
+            if (i > 0) {
+                printf(", ");
+            }
+            printf("%s", analysis->design_focus[i]);
+        }
+        printf("\n");
+    }
+
+    printf("- defaults: ");
+    if (ctx->language[0]) {
+        printf("language %s", ctx->language);
+    }
+    if (ctx->platform[0]) {
+        if (ctx->language[0]) {
+            printf(", ");
+        }
+        printf("platform %s", ctx->platform);
+    }
+    if (ctx->framework[0]) {
+        if (ctx->language[0] || ctx->platform[0]) {
+            printf(", ");
+        }
+        printf("framework %s", ctx->framework);
+    }
+    if (ctx->language[0] == '\0' && ctx->platform[0] == '\0' && ctx->framework[0] == '\0') {
+        printf("(unspecified)");
+    }
+    printf("\n");
+
+    if (analysis->related_count > 0) {
+        printf("- wordnet context:\n");
+        print_related_terms(analysis);
+    }
+
+    if (ctx->language[0] == '\0' || ctx->platform[0] == '\0') {
+        printf("- questions:\n");
+        if (ctx->language[0] == '\0') {
+            printf("  - Which language or runtime should I target?\n");
+        }
+        if (ctx->platform[0] == '\0') {
+            printf("  - Should this be a CLI, service, library, or UI?\n");
+        }
+    }
+    if (ctx->alt_language_count > 0 || ctx->alt_platform_count > 0 || ctx->alt_framework_count > 0) {
+        printf("- ambiguous hints: ");
+        if (ctx->alt_language_count > 0) {
+            printf("languages %s", ctx->alt_languages[0]);
+        }
+        if (ctx->alt_platform_count > 0) {
+            if (ctx->alt_language_count > 0) {
+                printf(", ");
+            }
+            printf("platforms %s", ctx->alt_platforms[0]);
+        }
+        if (ctx->alt_framework_count > 0) {
+            if (ctx->alt_language_count > 0 || ctx->alt_platform_count > 0) {
+                printf(", ");
+            }
+            printf("frameworks %s", ctx->alt_frameworks[0]);
+        }
+        printf("\n");
+    }
+}
+
 static void reset_context(struct chat_context *ctx)
 {
     memset(ctx, 0, sizeof(*ctx));
@@ -906,6 +1104,7 @@ int main(int argc, char **argv)
 {
     char input[MAX_INPUT];
     struct chat_context ctx;
+    struct analysis_result analysis;
     int quiet = 0;
 
     memset(&ctx, 0, sizeof(ctx));
@@ -954,9 +1153,9 @@ int main(int argc, char **argv)
             printf("Memory reset.\n");
             continue;
         }
-        analyze_input(input, &ctx);
+        analyze_input(input, &ctx, &analysis);
         if (!quiet) {
-            print_context_check(&ctx);
+            generate_response(&ctx, &analysis);
         }
     }
     return 0;
