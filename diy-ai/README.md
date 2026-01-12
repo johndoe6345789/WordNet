@@ -12,6 +12,13 @@ cmake -S . -B build
 cmake --build build --target wn-meaning
 ```
 
+If you prefer building from inside `diy-ai/`:
+
+```bash
+cmake -S . -B .
+cmake --build . --target wn-meaning
+```
+
 ## Run
 
 ```bash
